@@ -1,15 +1,21 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "VetBook",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vetbook.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "VetBook needs access to your camera to take photos of your pet.",
+        "NSPhotoLibraryUsageDescription": "VetBook needs access to your photo library to upload pet profile pictures and medical records."
+      }
     },
     "android": {
+      "package": "com.vetbook.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -19,6 +25,31 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-splash-screen",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "VetBook needs access to your photos to upload pet profile pictures and medical records.",
+          "cameraPermission": "VetBook needs access to your camera to take photos of your pet."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "45c6f071-23ad-4887-8e0b-2c975198c3ae"
+      }
     }
   }
 }
