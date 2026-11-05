@@ -70,7 +70,16 @@ const ThemedDialog = ({
 
               {/* Title & Message */}
               {!!title && <Text style={styles.title}>{title}</Text>}
-              {!!message && <Text style={styles.message}>{message}</Text>}
+              {!!message && (
+                <Text
+                  style={[
+                    styles.message,
+                    typeof message === 'string' && message.includes('\n') && styles.messageMultiline,
+                  ]}
+                >
+                  {message}
+                </Text>
+              )}
 
               {/* Buttons */}
               <View style={[styles.btnRow, !isConfirm && styles.btnRowSingle]}>
@@ -126,8 +135,8 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.elevated,
+    borderColor: colors.divider || '#EAE6DE',
+    ...shadows.card,
   },
   iconCircle: {
     width: 56,
@@ -147,10 +156,16 @@ const styles = StyleSheet.create({
   message: {
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.md,
-    color: colors.textSecondary,
+    color: '#3E433E',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 21,
     marginBottom: spacing.xl,
+    paddingHorizontal: spacing.xs,
+  },
+  messageMultiline: {
+    textAlign: 'left',
+    width: '100%',
+    lineHeight: 22,
   },
   btnRow: {
     flexDirection: 'row',
@@ -166,7 +181,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.cardWarm,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.divider || '#EAE6DE',
     alignItems: 'center',
     justifyContent: 'center',
   },

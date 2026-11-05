@@ -72,3 +72,19 @@ export const clearSession = async () => {
     return false;
   }
 };
+
+export const setUser = saveUser;
+export const setToken = saveToken;
+
+export default {
+  saveToken,
+  getToken,
+  removeToken,
+  setToken,
+  saveUser,
+  getUser,
+  removeUser,
+  setUser,
+  clearSession,
+};
+

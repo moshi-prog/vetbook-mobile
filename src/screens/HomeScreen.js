@@ -268,7 +268,7 @@ const HomeScreen = ({ navigation }) => {
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const greeting   = getGreeting();
-  const firstName  = getFirstName(user?.name);
+  const firstName  = getFirstName(user?.name || user?.user?.name);
 
   // Show upcoming appointments if status is 'approved' OR 'pending' (today or future dates)
   const now = new Date();

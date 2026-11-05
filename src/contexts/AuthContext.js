@@ -17,20 +17,34 @@ export const AuthProvider = ({ children }) => {
         const storedToken = await storage.getToken();
         const storedUser = await storage.getUser();
 
-        if (storedToken && storedUser) {
+        if (storedToken) {
           setToken(storedToken);
-          setUser(storedUser);
 
-          // Optionally verify token is still valid by hitting /me
+          if (storedUser) {
+            // Defensively unpack if storedUser was saved in legacy { user: { ... } } wrapper
+            const initialUser = storedUser.user || storedUser;
+            setUser(initialUser);
+          }
+
+          // Verify token is still valid and refresh user profile by hitting /me
           try {
             const response = await api.getMe();
-            setUser(response.data);
-            await storage.saveUser(response.data);
+            const userData = response.data?.user ?? response.data;
+            if (userData) {
+              setUser(userData);
+              await storage.saveUser(userData);
+            }
           } catch (err) {
-            // Token expired — clear session
-            await storage.clearSession();
-            setToken(null);
-            setUser(null);
+            // Only clear session if server explicitly returns 401 Unauthorized (token invalid / expired)
+            if (err?.response?.status === 401) {
+              console.warn('Session expired (401), clearing stored session.');
+              await storage.clearSession();
+              setToken(null);
+              setUser(null);
+            } else {
+              // Network error or offline — retain stored session so user remains logged in
+              console.warn('Could not refresh session from /me endpoint, keeping stored user:', err?.message);
+            }
           }
         }
       } catch (err) {
@@ -48,7 +62,8 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await api.register(data);
-      const { token: newToken, user: newUser } = response.data;
+      const newToken = response.data?.token;
+      const newUser = response.data?.user ?? response.data;
 
       if (newToken && newUser) {
         await storage.saveToken(newToken);
@@ -73,7 +88,8 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await api.login({ email, password });
-      const { token: newToken, user: newUser } = response.data;
+      const newToken = response.data?.token;
+      const newUser = response.data?.user ?? response.data;
 
       if (newToken && newUser) {
         await storage.saveToken(newToken);
@@ -122,7 +138,8 @@ export const AuthProvider = ({ children }) => {
 
   const updateUserState = async (updatedFields) => {
     setUser((prev) => {
-      const next = { ...prev, ...updatedFields };
+      const fieldsToMerge = updatedFields?.user ? updatedFields.user : updatedFields;
+      const next = { ...prev, ...fieldsToMerge };
       storage.saveUser(next);
       return next;
     });

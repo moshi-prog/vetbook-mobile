@@ -128,8 +128,8 @@ const ProfileScreen = () => {
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
 
   // Form states
-  const [profileName, setProfileName] = useState(user?.name || '');
-  const [profilePhone, setProfilePhone] = useState(user?.phone_number || '');
+  const [profileName, setProfileName] = useState(user?.name || user?.user?.name || '');
+  const [profilePhone, setProfilePhone] = useState(user?.phone_number || user?.user?.phone_number || '');
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -182,8 +182,8 @@ const ProfileScreen = () => {
     });
   };
 
-  const displayName = user?.name || 'VetBook User';
-  const email = user?.email || '';
+  const displayName = user?.name || user?.user?.name || 'VetBook User';
+  const email = user?.email || user?.user?.email || '';
 
   // ── Avatar Pick & Upload ───────────────────────────────────────────────────
 
@@ -230,8 +230,8 @@ const ProfileScreen = () => {
   // ── Profile Updates ────────────────────────────────────────────────────────
 
   const handleOpenEditProfile = () => {
-    setProfileName(user?.name || '');
-    setProfilePhone(user?.phone_number || '');
+    setProfileName(user?.name || user?.user?.name || '');
+    setProfilePhone(user?.phone_number || user?.user?.phone_number || '');
     setEditProfileVisible(true);
   };
 
@@ -385,7 +385,9 @@ const ProfileScreen = () => {
 
           <Text style={styles.name}>{displayName}</Text>
           {!!email && <Text style={styles.email}>{email}</Text>}
-          {!!user?.phone_number && <Text style={styles.phone}>{user.phone_number}</Text>}
+          {!!(user?.phone_number || user?.user?.phone_number) && (
+            <Text style={styles.phone}>{user?.phone_number || user?.user?.phone_number}</Text>
+          )}
 
           <View style={styles.verifiedPill}>
             <Ionicons name="shield-checkmark" size={14} color={colors.amberDark} />

@@ -281,14 +281,21 @@ const MyAppointmentsScreen = ({ navigation }) => {
     });
   };
 
-  const showConfirm = ({ title, message, confirmLabel = 'Confirm', destructive = false, onConfirm }) => {
+  const showConfirm = ({
+    title,
+    message,
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
+    destructive = false,
+    onConfirm,
+  }) => {
     setDialog({
       visible: true,
       title,
       message,
       type: destructive ? 'error' : 'confirm',
       confirmText: confirmLabel,
-      cancelText: 'Cancel',
+      cancelText: cancelLabel,
       destructive,
       onConfirm: () => {
         setDialog((prev) => ({ ...prev, visible: false }));
@@ -433,25 +440,36 @@ const MyAppointmentsScreen = ({ navigation }) => {
     }
   };
 
-  const handleCancel = (id) => {
+  const handleCancel = (idOrAppt) => {
+    const targetId = typeof idOrAppt === 'object' ? idOrAppt?.id : idOrAppt;
+    const appt =
+      appointments.find((a) => a.id === targetId) ||
+      (typeof idOrAppt === 'object' ? idOrAppt : null);
+
+    const petName = appt?.pet?.name || 'your pet';
+    const formattedDate = appt?.appointment_date
+      ? formatDate(appt.appointment_date)
+      : 'the scheduled date';
+
     showConfirm({
-      title: 'Cancel appointment?',
-      message: 'This will free up the time slot. This action cannot be undone.',
+      title: 'Cancel Appointment?',
+      message: `Are you sure you want to cancel the appointment for ${petName} on ${formattedDate}?`,
       confirmLabel: 'Yes, cancel',
       cancelLabel: 'Keep it',
       destructive: true,
       onConfirm: async () => {
-        setCancellingId(id);
+        setCancellingId(targetId);
         try {
-          await api.cancelAppointment(id);
+          await api.cancelAppointment(targetId);
           await fetchAppointments();
           showNotificationBanner({
             title: 'Appointment Cancelled',
-            message: 'Your appointment has been cancelled.',
+            message: `Your appointment for ${petName} has been cancelled.`,
             type: 'cancellation',
-            appointmentId: id,
+            appointmentId: targetId,
           });
-          fetchNotifications(true);
+          showDialog('Success', 'Appointment cancelled successfully.', 'success');
+          fetchNotifications?.(true);
         } catch (err) {
           const msg =
             err?.response?.data?.message ?? err?.message ?? 'Could not cancel the appointment.';
