@@ -15,6 +15,7 @@ import React, { useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // ── Literata (heading font) ────────────────────────────────────────────────
 import {
@@ -32,6 +33,7 @@ import {
 
 // ── App-level providers & navigator ──────────────────────────────────────
 import { AuthProvider } from './src/contexts/AuthContext';
+import { NotificationProvider } from './src/contexts/NotificationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 // Keep the native splash screen visible while fonts are fetched.
@@ -72,10 +74,14 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      {/* Dark-content status bar to match the #FAF6F0 cream background */}
-      <StatusBar style="dark" />
-      <AppNavigator onLayout={onLayoutRootView} />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          {/* Dark-content status bar to match the #FAF6F0 cream background */}
+          <StatusBar style="dark" />
+          <AppNavigator onLayout={onLayoutRootView} />
+        </NotificationProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

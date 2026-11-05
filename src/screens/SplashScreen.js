@@ -29,24 +29,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
+import { useAuth } from '../contexts/AuthContext';
 
 // ─── Auto-advance delay (ms) ────────────────────────────────────────────────
 const SPLASH_DURATION = 2500;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const SplashScreen = ({ navigation }) => {
+  const { isAuthenticated } = useAuth();
+
   /**
-   * Auto-navigate to the Login screen after SPLASH_DURATION ms.
+   * Auto-navigate to MainTabs if authenticated, or Login screen after SPLASH_DURATION ms.
    * The cleanup function cancels the timer if the component unmounts early
    * (e.g. fast hardware navigation) to prevent a no-op state update.
    */
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigation.replace('Login');
+      if (isAuthenticated) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+        });
+      } else {
+        navigation.replace('Login');
+      }
     }, SPLASH_DURATION);
 
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, isAuthenticated]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

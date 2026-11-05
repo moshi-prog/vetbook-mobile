@@ -544,8 +544,6 @@ const MyPetsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-        />
-      )}
     </SafeAreaView>
   );
 };

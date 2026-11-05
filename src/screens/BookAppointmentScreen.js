@@ -41,6 +41,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import api from '../services/api';
+import { useNotification } from '../contexts/NotificationContext';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ const SectionHeading = ({ title, right }) => (
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BookAppointmentScreen = ({ route, navigation }) => {
+  const { showNotificationBanner, fetchNotifications } = useNotification();
   // On web, bound the screen to the real window height so the ScrollView scrolls.
   const { height: windowHeight } = useWindowDimensions();
   const { petId: preselectedPetId, pet: preselectedPet } = route?.params || {};
@@ -316,6 +318,13 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     try {
       const res = await api.createAppointment(payload);
       const appointment = res?.data?.appointment ?? res?.data ?? payload;
+      showNotificationBanner({
+        title: 'Appointment Booked',
+        message: 'Your booking has been received and is pending clinic review.',
+        type: 'appointment',
+        appointmentId: appointment?.id,
+      });
+      fetchNotifications(true);
       finishBooking(appointment);
     } catch (err) {
       const data = err?.response?.data;

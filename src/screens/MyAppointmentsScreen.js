@@ -41,6 +41,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
+import { useNotification } from '../contexts/NotificationContext';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -237,6 +238,7 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 const MyAppointmentsScreen = ({ navigation }) => {
+  const { showNotificationBanner, fetchNotifications } = useNotification();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -406,6 +408,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
       return;
     }
     setSubmittingReschedule(true);
+    const targetApptId = reschedulingAppt?.id;
     try {
       await api.rescheduleAppointment(reschedulingAppt.id, {
         appointment_date: selectedRescheduleDate,
@@ -414,6 +417,13 @@ const MyAppointmentsScreen = ({ navigation }) => {
       setRescheduleModalVisible(false);
       setReschedulingAppt(null);
       await fetchAppointments();
+      showNotificationBanner({
+        title: 'Appointment Rescheduled',
+        message: 'Your visit has been rescheduled successfully.',
+        type: 'reschedule',
+        appointmentId: targetApptId,
+      });
+      fetchNotifications(true);
       showDialog('Success', 'Appointment rescheduled successfully.', 'success');
     } catch (err) {
       const msg = err?.response?.data?.message ?? err?.message ?? 'Could not reschedule appointment.';
@@ -435,6 +445,13 @@ const MyAppointmentsScreen = ({ navigation }) => {
         try {
           await api.cancelAppointment(id);
           await fetchAppointments();
+          showNotificationBanner({
+            title: 'Appointment Cancelled',
+            message: 'Your appointment has been cancelled.',
+            type: 'cancellation',
+            appointmentId: id,
+          });
+          fetchNotifications(true);
         } catch (err) {
           const msg =
             err?.response?.data?.message ?? err?.message ?? 'Could not cancel the appointment.';

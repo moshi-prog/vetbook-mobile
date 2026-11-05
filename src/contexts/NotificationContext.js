@@ -1,0 +1,257 @@
+/**
+ * NotificationContext.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VetBook — Global In-App Notification Banner Context & Real-Time Alerts
+ *
+ * Responsibilities:
+ *  1. Manages global in-app notification banner state (`showNotificationBanner`, `hideNotificationBanner`).
+ *  2. Renders <NotificationBanner /> globally at root level over all navigators.
+ *  3. Performs periodic background polling (every 25s) for real-time admin updates
+ *     (e.g., appointment approved, rescheduled, or cancelled by clinic staff).
+ *  4. Triggers animated banners and haptic vibration when new unread alerts arrive.
+ *  5. Synchronizes unread counter and notification records across the app.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+} from 'react';
+import { Vibration } from 'react-native';
+import { useAuth } from './AuthContext';
+import {
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '../services/api';
+import NotificationBanner from '../components/NotificationBanner';
+import { navigationRef } from '../navigation/navigationRef';
+
+const NotificationContext = createContext(null);
+
+export const NotificationProvider = ({ children }) => {
+  const { isAuthenticated } = useAuth();
+
+  // Banner State
+  const [banner, setBanner] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    timestamp: 'Just now',
+    appointmentId: null,
+    onPress: null,
+  });
+
+  // Notifications State & Unread Counter
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Tracking seen notification IDs to detect newly arrived alerts during polling
+  const knownNotificationIds = useRef(new Set());
+  const initialLoadDone = useRef(false);
+
+  /**
+   * Global helper to trigger the animated in-app notification banner
+   */
+  const showNotificationBanner = useCallback(
+    ({
+      title,
+      message,
+      type = 'info',
+      timestamp = 'Just now',
+      appointmentId = null,
+      onPress = null,
+    }) => {
+      setBanner({
+        visible: true,
+        title: title || 'Clinic Notification',
+        message: message || '',
+        type,
+        timestamp,
+        appointmentId,
+        onPress:
+          onPress ||
+          (() => {
+            // Default on-tap behavior: navigate to Appointments tab
+            try {
+              if (navigationRef.isReady()) {
+                navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+              }
+            } catch (err) {
+              // Graceful fallback
+            }
+          }),
+      });
+    },
+    []
+  );
+
+  /**
+   * Dismiss the banner
+   */
+  const hideNotificationBanner = useCallback(() => {
+    setBanner((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  /**
+   * Fetch notifications from backend API and check for new unread alerts
+   */
+  const fetchNotifications = useCallback(
+    async (silent = false) => {
+      if (!isAuthenticated) return;
+
+      try {
+        if (!silent) setLoading(true);
+        const res = await getNotifications();
+        const list = res.data?.notifications ?? [];
+        const count = res.data?.unread_count ?? 0;
+
+        setNotifications(list);
+        setUnreadCount(count);
+
+        if (!initialLoadDone.current) {
+          // On first fetch, record all existing notification IDs so we don't spam old banners
+          list.forEach((n) => knownNotificationIds.current.add(n.id));
+          initialLoadDone.current = true;
+        } else {
+          // Detect newly arrived unread notifications during subsequent poll
+          const newUnreads = list.filter(
+            (n) => !n.read_at && !knownNotificationIds.current.has(n.id)
+          );
+
+          if (newUnreads.length > 0) {
+            // Present the newest alert
+            const newest = newUnreads[0];
+            newUnreads.forEach((n) => knownNotificationIds.current.add(n.id));
+
+            showNotificationBanner({
+              title: newest.title || 'Clinic Update',
+              message:
+                newest.message ||
+                'You have a new update regarding your pet appointment.',
+              type: newest.type || 'appointment',
+              appointmentId: newest.data?.appointment_id,
+            });
+
+            // Gentle haptic feedback
+            try {
+              Vibration.vibrate(80);
+            } catch (e) {
+              // Ignored if device lacks vibration support
+            }
+          }
+        }
+      } catch (err) {
+        // Network glitches degrade gracefully without UI disruption
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [isAuthenticated, showNotificationBanner]
+  );
+
+  /**
+   * Periodic background polling: every 25 seconds when user is authenticated
+   */
+  useEffect(() => {
+    if (!isAuthenticated) {
+      knownNotificationIds.current.clear();
+      initialLoadDone.current = false;
+      setNotifications([]);
+      setUnreadCount(0);
+      setBanner((prev) => ({ ...prev, visible: false }));
+      return;
+    }
+
+    // Initial fetch on sign in
+    fetchNotifications(true);
+
+    // 25s polling loop for real-time clinic updates
+    const pollInterval = setInterval(() => {
+      fetchNotifications(true);
+    }, 25000);
+
+    return () => clearInterval(pollInterval);
+  }, [isAuthenticated, fetchNotifications]);
+
+  /**
+   * Mark individual notification as read
+   */
+  const markAsRead = useCallback(async (id) => {
+    try {
+      await markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, read_at: new Date().toISOString() } : n
+        )
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch (e) {
+      // Ignored
+    }
+  }, []);
+
+  /**
+   * Mark all notifications as read
+   */
+  const markAllAsRead = useCallback(async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) =>
+        prev.map((n) => ({
+          ...n,
+          read_at: n.read_at || new Date().toISOString(),
+        }))
+      );
+      setUnreadCount(0);
+    } catch (e) {
+      // Ignored
+    }
+  }, []);
+
+  return (
+    <NotificationContext.Provider
+      value={{
+        banner,
+        showNotificationBanner,
+        hideNotificationBanner,
+        notifications,
+        unreadCount,
+        loadingNotifications: loading,
+        fetchNotifications,
+        markAsRead,
+        markAllAsRead,
+      }}
+    >
+      {children}
+
+      {/* Floating Animated In-App Notification Banner */}
+      <NotificationBanner
+        visible={banner.visible}
+        title={banner.title}
+        message={banner.message}
+        type={banner.type}
+        timestamp={banner.timestamp}
+        onPress={banner.onPress}
+        onDismiss={hideNotificationBanner}
+      />
+    </NotificationContext.Provider>
+  );
+};
+
+export const useNotification = () => {
+  const context = useContext(NotificationContext);
+  if (!context) {
+    throw new Error('useNotification must be used within a NotificationProvider');
+  }
+  return context;
+};
+
+export default NotificationContext;
+

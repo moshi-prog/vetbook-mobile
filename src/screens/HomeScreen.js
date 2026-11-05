@@ -38,6 +38,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   getUserAppointments,
   getNotifications,
@@ -186,25 +187,18 @@ const HomeScreen = ({ navigation }) => {
   // Branch Phone Call Modal State
   const [callModalVisible, setCallModalVisible] = useState(false);
 
-  // Notifications State
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // Global Notifications State & Real-Time Alerts
+  const {
+    unreadCount,
+    notifications,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotification();
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await getNotifications();
-      const list = res.data?.notifications ?? [];
-      const count = res.data?.unread_count ?? 0;
-      setNotifications(list);
-      setUnreadCount(count);
-    } catch (err) {
-      // Gracefully degrade
-    }
-  }, []);
-
   const fetchAppointments = useCallback(async () => {
     try {
       const response = await getUserAppointments();
@@ -247,27 +241,11 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleMarkOneRead = async (id) => {
-    try {
-      await markNotificationRead(id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
-    } catch (e) {
-      // ignore
-    }
+    await markAsRead(id);
   };
 
   const handleMarkAllRead = async () => {
-    try {
-      await markAllNotificationsRead();
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
-      );
-      setUnreadCount(0);
-    } catch (e) {
-      // ignore
-    }
+    await markAllAsRead();
   };
 
   const formatRelativeTime = (dateStr) => {
@@ -338,13 +316,13 @@ const HomeScreen = ({ navigation }) => {
             onPress={handleOpenNotifications}
           >
             <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
-            {unreadCount > 0 && (
+            {unreadCount > 0 ? (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </Text>
               </View>
-            )}
+            ) : null}
           </TouchableOpacity>
 
           {/* User avatar circle */}
@@ -674,18 +652,18 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.notifHeaderLeft}>
                 <Ionicons name="notifications" size={20} color={colors.primary} />
                 <Text style={styles.notifTitle}>Notifications</Text>
-                {unreadCount > 0 && (
+                {unreadCount > 0 ? (
                   <View style={styles.notifUnreadBadge}>
                     <Text style={styles.notifUnreadBadgeText}>{unreadCount}</Text>
                   </View>
-                )}
+                ) : null}
               </View>
               <View style={styles.notifHeaderRight}>
-                {unreadCount > 0 && (
+                {unreadCount > 0 ? (
                   <TouchableOpacity onPress={handleMarkAllRead} style={styles.markAllBtn}>
                     <Text style={styles.markAllText}>Mark all as read</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
                 <TouchableOpacity onPress={() => setNotifModalVisible(false)} style={styles.closeNotifBtn}>
                   <Ionicons name="close" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -744,7 +722,7 @@ const HomeScreen = ({ navigation }) => {
                         </View>
                         <Text style={styles.notifItemMsg}>{item.message}</Text>
                       </View>
-                      {isUnread && <View style={styles.unreadDot} />}
+                      {isUnread ? <View style={styles.unreadDot} /> : null}
                     </TouchableOpacity>
                   );
                 })}

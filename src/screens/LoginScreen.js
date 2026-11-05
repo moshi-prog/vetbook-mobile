@@ -19,7 +19,7 @@
  *
  * Navigation:
  *  • Back arrow      → goBack()
- *  • Login success   → replace('Home')    (no back-stack return)
+ *  • Login success   → reset to 'MainTabs' (no back-stack return)
  *  • Sign Up link    → navigate('Register')
  *  • Forgot password → Alert "Coming soon"
  * ─────────────────────────────────────────────────────────────────────────────
@@ -102,8 +102,10 @@ const LoginScreen = ({ navigation }) => {
       const result = await login(email.trim().toLowerCase(), password);
 
       if (result.success) {
-        // Replace so the Login screen is removed from the back stack
-        navigation.replace('Home');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+        });
       } else {
         const msg = result.error || 'Invalid email or password.';
         setErrorMessage(msg);

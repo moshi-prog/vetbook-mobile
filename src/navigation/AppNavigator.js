@@ -24,6 +24,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors, fonts, fontSizes, spacing } from '../theme';
+import { navigationRef } from './navigationRef';
 
 // ── Screen imports ────────────────────────────────────────────────────────────
 import SplashScreen   from '../screens/SplashScreen';
@@ -47,6 +48,8 @@ const AuthStack = () => (
     <Stack.Screen name="Splash"    component={SplashScreen} />
     <Stack.Screen name="Login"     component={LoginScreen} />
     <Stack.Screen name="Register"  component={RegisterScreen} />
+    <Stack.Screen name="Main"      component={BottomTabs} />
+    <Stack.Screen name="MainTabs"  component={BottomTabs} />
   </Stack.Navigator>
 );
 
@@ -58,6 +61,7 @@ const AuthStack = () => (
 const MainStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="MainTabs" component={BottomTabs} />
+    <Stack.Screen name="Main"     component={BottomTabs} />
     <Stack.Screen name="BookAppointment" component={BookAppointmentScreen} />
     <Stack.Screen name="AddPet" component={AddPetScreen} />
     <Stack.Screen name="PetDetails" component={PetDetailsScreen} />
@@ -81,7 +85,7 @@ const AppNavigator = ({ onLayout }) => {
   }
 
   return (
-    <NavigationContainer onReady={onLayout}>
+    <NavigationContainer ref={navigationRef} onReady={onLayout}>
       {isAuthenticated ? <MainStack /> : <AuthStack />}
     </NavigationContainer>
   );
