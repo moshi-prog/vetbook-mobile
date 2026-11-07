@@ -44,6 +44,7 @@ import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  getBranches,
 } from '../services/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ const statusStyle = (status) => {
 
 // ─── Branch Data ─────────────────────────────────────────────────────────────
 
-const CLINIC_BRANCHES = [
+const DEFAULT_CLINIC_BRANCHES = [
   {
     id: 'mabini',
     name: 'Mabini Branch',
@@ -186,6 +187,7 @@ const HomeScreen = ({ navigation }) => {
 
   // Branch Phone Call Modal State
   const [callModalVisible, setCallModalVisible] = useState(false);
+  const [branches, setBranches] = useState(DEFAULT_CLINIC_BRANCHES);
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -218,20 +220,37 @@ const HomeScreen = ({ navigation }) => {
     }
   }, []);
 
-  // Re-fetch appointments and notifications whenever Home tab is focused
+  const fetchBranches = useCallback(async () => {
+    try {
+      const response = await getBranches();
+      const list = response.data?.data;
+      if (Array.isArray(list) && list.length > 0) {
+        setBranches(list);
+      }
+    } catch (err) {
+      console.warn('Could not refresh clinic branch info:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
+
+  // Re-fetch appointments, notifications, and branch hotlines whenever Home tab is focused
   useFocusEffect(
     useCallback(() => {
       fetchAppointments();
       fetchNotifications();
-    }, [fetchAppointments, fetchNotifications])
+      fetchBranches();
+    }, [fetchAppointments, fetchNotifications, fetchBranches])
   );
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchAppointments(), fetchNotifications()]);
+    await Promise.all([fetchAppointments(), fetchNotifications(), fetchBranches()]);
     setRefreshing(false);
-  }, [fetchAppointments, fetchNotifications]);
+  }, [fetchAppointments, fetchNotifications, fetchBranches]);
 
   const handleOpenNotifications = async () => {
     setNotifModalVisible(true);
@@ -598,7 +617,7 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.clinicDivider} />
 
             {/* Branches List */}
-            {CLINIC_BRANCHES.map((branch, index) => (
+            {branches.map((branch, index) => (
               <View
                 key={branch.id}
                 style={[
@@ -766,7 +785,7 @@ const HomeScreen = ({ navigation }) => {
 
             {/* Branch Options */}
             <View style={styles.callOptionsList}>
-              {CLINIC_BRANCHES.map((b) => (
+              {branches.map((b) => (
                 <TouchableOpacity
                   key={b.id}
                   style={styles.callOptionCard}

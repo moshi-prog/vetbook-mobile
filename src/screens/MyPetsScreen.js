@@ -85,6 +85,22 @@ const MyPetsScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [contactModalVisible, setContactModalVisible] = useState(false);
+  const [branches, setBranches] = useState([
+    {
+      id: 'mabini',
+      name: 'Mabini Branch',
+      addressSummary: '142 Mabini St., Poblacion, Mabini',
+      phone: '0917-123-4567',
+      dialUrl: 'tel:09171234567',
+    },
+    {
+      id: 'batangas_city',
+      name: 'Batangas City Branch',
+      addressSummary: 'N.F. Almario Bldg, Kumintang Ilaya',
+      phone: '0918-765-4321',
+      dialUrl: 'tel:09187654321',
+    },
+  ]);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchPets = useCallback(async () => {
@@ -103,6 +119,15 @@ const MyPetsScreen = ({ navigation }) => {
     }
   }, []);
 
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await api.getBranches();
+      if (res.data?.data && Array.isArray(res.data.data)) {
+        setBranches(res.data.data);
+      }
+    } catch (err) {}
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -114,6 +139,7 @@ const MyPetsScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       fetchPets();
+      fetchBranches();
     }, [fetchPets])
   );
 
@@ -460,7 +486,31 @@ const MyPetsScreen = ({ navigation }) => {
 
             {/* Options List */}
             <View style={styles.contactOptionsList}>
-              {/* Branch 1: Mabini Branch */}
+              {branches.map((b) => (
+                <View key={b.id} style={styles.contactOptionCard}>
+                  <View style={styles.contactOptionInfo}>
+                    <View style={styles.contactOptionTitleRow}>
+                      <Ionicons name="location" size={14} color={colors.primary} />
+                      <Text style={styles.contactOptionBranch}>{b.name}</Text>
+                    </View>
+                    <Text style={styles.contactOptionAddress}>{b.addressSummary || b.address}</Text>
+                    <View style={styles.contactOptionPhoneRow}>
+                      <Ionicons name="call-outline" size={12} color={colors.textSecondary} />
+                      <Text style={styles.contactOptionPhone}>{b.phone}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.branchCallBtn}
+                    activeOpacity={0.85}
+                    onPress={() => handleCallBranch(b.dialUrl, b.phone)}
+                    accessibilityLabel={`Call ${b.name}`}
+                  >
+                    <Ionicons name="call" size={13} color={colors.white} />
+                    <Text style={styles.branchCallBtnText}>Call {b.name.replace(' Branch', '')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {false && (
               <View style={styles.contactOptionCard}>
                 <View style={styles.contactOptionInfo}>
                   <View style={styles.contactOptionTitleRow}>
@@ -508,6 +558,7 @@ const MyPetsScreen = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
 
+              )}
               {/* Option 3: AI Vet Assistant */}
               <TouchableOpacity
                 style={styles.chatOptionCard}

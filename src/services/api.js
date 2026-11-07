@@ -113,6 +113,7 @@ export const markAllNotificationsRead = () => api.put('/notifications/read-all')
 // ============= CHATBOT ENDPOINT (for later) =============
 
 export const sendChatMessage = (data) => api.post('/chatbot/message', data);
+export const getBranches = () => api.get('/branches');
 
 // ============= ATTACH HELPERS TO DEFAULT EXPORT =============
 api.register = register;
@@ -138,5 +139,6 @@ api.getNotifications = getNotifications;
 api.markNotificationRead = markNotificationRead;
 api.markAllNotificationsRead = markAllNotificationsRead;
 api.sendChatMessage = sendChatMessage;
+api.getBranches = getBranches;
 
 export default api;
