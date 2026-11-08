@@ -59,6 +59,7 @@ export const logout = () => api.post('/logout');
 export const getMe = () => api.get('/me');
 export const updateProfile = (data) => api.put('/user/profile', data);
 export const changePassword = (data) => api.put('/user/password', data);
+export const resetPassword = (data) => api.post('/reset-password', data);
 
 // ============= PET ENDPOINTS (for later) =============
 
@@ -102,13 +103,14 @@ export const getUserAppointments = () => api.get('/user/appointments');
 export const getAppointment = (id) => api.get(`/appointments/${id}`);
 export const createAppointment = (data) => api.post('/appointments', data);
 export const rescheduleAppointment = (id, data) => api.put(`/appointments/${id}/reschedule`, data);
-export const cancelAppointment = (id) => api.put(`/appointments/${id}/cancel`);
+export const cancelAppointment = (id, data = {}) => api.put(`/appointments/${id}/cancel`, data);
 
 // ============= NOTIFICATIONS ENDPOINTS =============
 
 export const getNotifications = () => api.get('/notifications');
 export const markNotificationRead = (id) => api.put(`/notifications/${id}/read`);
 export const markAllNotificationsRead = () => api.put('/notifications/read-all');
+export const updatePushToken = (push_token) => api.post('/user/push-token', { push_token });
 
 // ============= CHATBOT ENDPOINT (for later) =============
 
@@ -122,6 +124,7 @@ api.logout = logout;
 api.getMe = getMe;
 api.updateProfile = updateProfile;
 api.changePassword = changePassword;
+api.resetPassword = resetPassword;
 api.getUserPets = getUserPets;
 api.getPet = getPet;
 api.createPet = createPet;
@@ -138,6 +141,7 @@ api.cancelAppointment = cancelAppointment;
 api.getNotifications = getNotifications;
 api.markNotificationRead = markNotificationRead;
 api.markAllNotificationsRead = markAllNotificationsRead;
+api.updatePushToken = updatePushToken;
 api.sendChatMessage = sendChatMessage;
 api.getBranches = getBranches;
 

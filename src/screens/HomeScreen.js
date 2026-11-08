@@ -763,18 +763,22 @@ const HomeScreen = ({ navigation }) => {
                       <View style={styles.notifIconWrap}>
                         <Ionicons
                           name={
-                            item.type?.includes('approved')
+                            item.type?.includes('approved') || item.type?.includes('confirmed')
                               ? 'checkmark-circle-outline'
+                              : item.type?.includes('completed')
+                              ? 'checkbox-outline'
                               : item.type?.includes('cancelled')
                               ? 'close-circle-outline'
-                              : item.type?.includes('rescheduled')
+                              : item.type?.includes('resched')
                               ? 'time-outline'
                               : 'calendar-outline'
                           }
                           size={20}
                           color={
-                            item.type?.includes('approved')
+                            item.type?.includes('approved') || item.type?.includes('confirmed')
                               ? colors.primary
+                              : item.type?.includes('completed')
+                              ? colors.primaryDeep
                               : item.type?.includes('cancelled')
                               ? colors.alertRed
                               : colors.amber

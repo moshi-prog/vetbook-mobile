@@ -42,6 +42,7 @@ import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from 
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
 import { useNotification } from '../contexts/NotificationContext';
+import { generateTimeSlots } from '../utils/timeSlots';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -74,9 +75,12 @@ const STATUS_LABELS = {
   cancelled: 'Cancelled',
 };
 
-const RESCHEDULE_TIME_SLOTS = [
-  '09:00', '09:30', '10:00', '10:30', '11:30',
-  '14:00', '14:30', '15:30', '16:00',
+const CANCELLATION_REASONS = [
+  'Schedule conflict',
+  'Pet feeling better / already treated',
+  'Financial reasons',
+  "Emergency / Can't make it",
+  'Other reason',
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -247,6 +251,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [selectedBranch, setSelectedBranch] = useState('All Branches');
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState(null);
+  const [branches, setBranches] = useState([]);
 
   // Reschedule state
   const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
@@ -255,6 +260,40 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [selectedRescheduleTime, setSelectedRescheduleTime] = useState('');
   const [submittingReschedule, setSubmittingReschedule] = useState(false);
   const availableDays = getNextDays(14);
+
+  // Dynamic Time Slots based on appointment branch operating hours
+  const reschedBranchObj = React.useMemo(() => {
+    if (!reschedulingAppt) return null;
+    return branches.find((b) =>
+      b.name === reschedulingAppt.branch ||
+      b.id === reschedulingAppt.branch ||
+      (reschedulingAppt.branch && b.name.toLowerCase().includes(reschedulingAppt.branch.toLowerCase()))
+    ) || {
+      weekday_open: '09:00',
+      weekday_close: '18:00',
+      sunday_open: '10:00',
+      sunday_close: '16:00',
+      sunday_closed: false,
+    };
+  }, [branches, reschedulingAppt]);
+
+  const { closed: isReschedClosed, slots: reschedSlots } = React.useMemo(() => {
+    return generateTimeSlots(reschedBranchObj, selectedRescheduleDate);
+  }, [reschedBranchObj, selectedRescheduleDate]);
+
+  // Ensure selectedRescheduleTime is valid whenever reschedSlots changes
+  React.useEffect(() => {
+    if (reschedSlots.length > 0 && !reschedSlots.includes(selectedRescheduleTime)) {
+      setSelectedRescheduleTime(reschedSlots[0]);
+    }
+  }, [reschedSlots]);
+
+  // Cancellation reason state
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancellingAppt, setCancellingAppt] = useState(null);
+  const [selectedCancelReason, setSelectedCancelReason] = useState('Schedule conflict');
+  const [customCancelReason, setCustomCancelReason] = useState('');
+  const [submittingCancel, setSubmittingCancel] = useState(false);
 
   // Themed dialog state
   const [dialog, setDialog] = useState({
@@ -323,18 +362,29 @@ const MyAppointmentsScreen = ({ navigation }) => {
     }
   }, []);
 
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await api.getBranches();
+      const list = res?.data?.data || res?.data || [];
+      if (Array.isArray(list) && list.length > 0) {
+        setBranches(list);
+      }
+    } catch (e) {}
+  }, []);
+
   // Refresh whenever the tab is focused (initial load shows the spinner only)
   useFocusEffect(
     useCallback(() => {
       fetchAppointments();
-    }, [fetchAppointments]),
+      fetchBranches();
+    }, [fetchAppointments, fetchBranches]),
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchAppointments();
+    await Promise.all([fetchAppointments(), fetchBranches()]);
     setRefreshing(false);
-  }, [fetchAppointments]);
+  }, [fetchAppointments, fetchBranches]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -405,7 +455,23 @@ const MyAppointmentsScreen = ({ navigation }) => {
     setReschedulingAppt(a);
     const currentDate = a.appointment_date ? a.appointment_date.split('T')[0] : availableDays[0].dateStr;
     setSelectedRescheduleDate(currentDate);
-    setSelectedRescheduleTime(a.appointment_time ? a.appointment_time.slice(0, 5) : '09:00');
+
+    const bObj = branches.find((b) =>
+      b.name === a.branch || b.id === a.branch || (a.branch && b.name.toLowerCase().includes(a.branch.toLowerCase()))
+    ) || {
+      weekday_open: '09:00',
+      weekday_close: '18:00',
+      sunday_open: '10:00',
+      sunday_close: '16:00',
+      sunday_closed: false,
+    };
+    const { slots } = generateTimeSlots(bObj, currentDate);
+    const existingTime = a.appointment_time ? a.appointment_time.slice(0, 5) : '';
+    if (slots.includes(existingTime)) {
+      setSelectedRescheduleTime(existingTime);
+    } else {
+      setSelectedRescheduleTime(slots[0] || '');
+    }
     setRescheduleModalVisible(true);
   };
 
@@ -425,13 +491,17 @@ const MyAppointmentsScreen = ({ navigation }) => {
       setReschedulingAppt(null);
       await fetchAppointments();
       showNotificationBanner({
-        title: 'Appointment Rescheduled',
-        message: 'Your visit has been rescheduled successfully.',
+        title: 'Reschedule Request Sent',
+        message: 'Please wait for the clinic admin to approve your new schedule.',
         type: 'reschedule',
         appointmentId: targetApptId,
       });
       fetchNotifications(true);
-      showDialog('Success', 'Appointment rescheduled successfully.', 'success');
+      showDialog(
+        'Pending Admin Approval',
+        'Your reschedule request has been submitted. Please wait for the clinic admin to approve your new appointment date and time.',
+        'info'
+      );
     } catch (err) {
       const msg = err?.response?.data?.message ?? err?.message ?? 'Could not reschedule appointment.';
       showDialog('Reschedule Failed', msg, 'error');
@@ -446,39 +516,46 @@ const MyAppointmentsScreen = ({ navigation }) => {
       appointments.find((a) => a.id === targetId) ||
       (typeof idOrAppt === 'object' ? idOrAppt : null);
 
-    const petName = appt?.pet?.name || 'your pet';
-    const formattedDate = appt?.appointment_date
-      ? formatDate(appt.appointment_date)
-      : 'the scheduled date';
+    if (!appt) return;
+    setCancellingAppt(appt);
+    setSelectedCancelReason('Schedule conflict');
+    setCustomCancelReason('');
+    setCancelModalVisible(true);
+  };
 
-    showConfirm({
-      title: 'Cancel Appointment?',
-      message: `Are you sure you want to cancel the appointment for ${petName} on ${formattedDate}?`,
-      confirmLabel: 'Yes, cancel',
-      cancelLabel: 'Keep it',
-      destructive: true,
-      onConfirm: async () => {
-        setCancellingId(targetId);
-        try {
-          await api.cancelAppointment(targetId);
-          await fetchAppointments();
-          showNotificationBanner({
-            title: 'Appointment Cancelled',
-            message: `Your appointment for ${petName} has been cancelled.`,
-            type: 'cancellation',
-            appointmentId: targetId,
-          });
-          showDialog('Success', 'Appointment cancelled successfully.', 'success');
-          fetchNotifications?.(true);
-        } catch (err) {
-          const msg =
-            err?.response?.data?.message ?? err?.message ?? 'Could not cancel the appointment.';
-          showDialog('Could not cancel', msg, 'error');
-        } finally {
-          setCancellingId(null);
-        }
-      },
-    });
+  const handleConfirmCancel = async () => {
+    if (!cancellingAppt) return;
+
+    let finalReason = selectedCancelReason;
+    if (selectedCancelReason === 'Other reason') {
+      finalReason = customCancelReason.trim() ? customCancelReason.trim() : 'Other reason';
+    } else if (customCancelReason.trim()) {
+      finalReason = `${selectedCancelReason} — ${customCancelReason.trim()}`;
+    }
+
+    setSubmittingCancel(true);
+    const targetId = cancellingAppt.id;
+
+    try {
+      await api.cancelAppointment(targetId, { cancel_reason: finalReason });
+      setCancelModalVisible(false);
+      setCancellingAppt(null);
+      await fetchAppointments();
+      showNotificationBanner({
+        title: 'Appointment Cancelled',
+        message: 'Your appointment has been cancelled.',
+        type: 'cancellation',
+        appointmentId: targetId,
+      });
+      fetchNotifications?.(true);
+      showDialog('Cancelled', 'Your appointment has been cancelled.', 'info');
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ?? err?.message ?? 'Could not cancel the appointment.';
+      showDialog('Could not cancel', msg, 'error');
+    } finally {
+      setSubmittingCancel(false);
+    }
   };
 
   const goBook = () => navigation.navigate('BookAppointment');
@@ -686,21 +763,37 @@ const MyAppointmentsScreen = ({ navigation }) => {
 
               {/* Time Selection */}
               <Text style={[styles.modalSectionLabel, { marginTop: spacing.md }]}>CHOOSE TIME SLOT</Text>
-              <View style={styles.timeGrid}>
-                {RESCHEDULE_TIME_SLOTS.map((slot) => {
-                  const isSel = selectedRescheduleTime === slot;
-                  return (
-                    <TouchableOpacity
-                      key={slot}
-                      style={[styles.timeSlot, isSel && styles.timeSlotActive]}
-                      onPress={() => setSelectedRescheduleTime(slot)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.timeSlotText, isSel && styles.timeSlotTextActive]}>{slot}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {isReschedClosed ? (
+                <View style={styles.closedCard}>
+                  <Ionicons name="calendar-outline" size={20} color="#BA1A1A" />
+                  <Text style={styles.closedTitle}>Clinic Closed on this day</Text>
+                  <Text style={styles.closedSub}>
+                    The clinic is closed on {selectedRescheduleDate}. Please choose another date.
+                  </Text>
+                </View>
+              ) : reschedSlots.length === 0 ? (
+                <View style={styles.closedCard}>
+                  <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+                  <Text style={styles.closedTitle}>No Slots Available</Text>
+                  <Text style={styles.closedSub}>Please choose another date.</Text>
+                </View>
+              ) : (
+                <View style={styles.timeGrid}>
+                  {reschedSlots.map((slot) => {
+                    const isSel = selectedRescheduleTime === slot;
+                    return (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[styles.timeSlot, isSel && styles.timeSlotActive]}
+                        onPress={() => setSelectedRescheduleTime(slot)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.timeSlotText, isSel && styles.timeSlotTextActive]}>{slot}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -720,6 +813,119 @@ const MyAppointmentsScreen = ({ navigation }) => {
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
                   <Text style={styles.modalSaveText}>Confirm Reschedule</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Cancellation Reason Modal ─────────────────────────────────────── */}
+      <Modal
+        visible={cancelModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !submittingCancel && setCancelModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Cancel Appointment</Text>
+                <Text style={styles.modalSub}>
+                  {cancellingAppt
+                    ? `For ${cancellingAppt.pet?.name || 'your pet'} on ${formatDate(cancellingAppt.appointment_date)}`
+                    : 'Please tell us why you need to cancel this appointment'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setCancelModalVisible(false)}
+                style={styles.modalCloseBtn}
+                disabled={submittingCancel}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Pet / Appointment info badge */}
+              {cancellingAppt && (
+                <View style={styles.cancelInfoBox}>
+                  <Ionicons name="alert-circle-outline" size={18} color={colors.alertRedDark} />
+                  <Text style={styles.cancelInfoText}>
+                    Cancelling for{' '}
+                    <Text style={{ fontFamily: fonts.bodyBold }}>
+                      {cancellingAppt.pet?.name || 'your pet'}
+                    </Text>{' '}
+                    on {formatDate(cancellingAppt.appointment_date)} at{' '}
+                    {formatTime(cancellingAppt.appointment_time)}
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.modalSectionLabel}>REASON FOR CANCELLATION</Text>
+              <View style={styles.reasonsList}>
+                {CANCELLATION_REASONS.map((reason) => {
+                  const isSel = selectedCancelReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      style={[styles.reasonItem, isSel && styles.reasonItemActive]}
+                      onPress={() => setSelectedCancelReason(reason)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.radioCircle, isSel && styles.radioCircleActive]}>
+                        {isSel && <View style={styles.radioInner} />}
+                      </View>
+                      <Text style={[styles.reasonItemText, isSel && styles.reasonItemTextActive]}>
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Text Input for details / Other */}
+              <Text style={[styles.modalSectionLabel, { marginTop: spacing.md }]}>
+                {selectedCancelReason === 'Other reason' ? 'PLEASE SPECIFY *' : 'ADDITIONAL DETAILS (OPTIONAL)'}
+              </Text>
+              <TextInput
+                style={styles.reasonTextInput}
+                placeholder={
+                  selectedCancelReason === 'Other reason'
+                    ? 'Please explain why you need to cancel...'
+                    : 'Any additional notes for the clinic...'
+                }
+                placeholderTextColor={colors.textMuted}
+                value={customCancelReason}
+                onChangeText={setCustomCancelReason}
+                multiline
+                numberOfLines={3}
+                maxLength={300}
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setCancelModalVisible(false)}
+                disabled={submittingCancel}
+              >
+                <Text style={styles.modalCancelText}>Keep Appointment</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalCancelDangerBtn,
+                  submittingCancel && { opacity: 0.7 },
+                  selectedCancelReason === 'Other reason' && !customCancelReason.trim() && { opacity: 0.5 },
+                ]}
+                onPress={handleConfirmCancel}
+                disabled={submittingCancel || (selectedCancelReason === 'Other reason' && !customCancelReason.trim())}
+              >
+                {submittingCancel ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSaveText}>Confirm Cancellation</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1168,6 +1374,27 @@ const styles = StyleSheet.create({
   timeSlotTextActive: {
     color: colors.white,
   },
+  closedCard: {
+    backgroundColor: '#FFF0F0',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    borderRadius: radii.md,
+    padding: spacing.base,
+    alignItems: 'center',
+    gap: 4,
+    marginVertical: spacing.xs,
+  },
+  closedTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.body,
+    color: '#BA1A1A',
+  },
+  closedSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   modalFooter: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -1202,6 +1429,90 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.body,
     color: colors.white,
+  },
+
+  // Cancellation Reason Modal Styles
+  cancelInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#FFF0F0',
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: '#FFD4D4',
+  },
+  cancelInfoText: {
+    flex: 1,
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.alertRedDark,
+  },
+  reasonsList: {
+    gap: spacing.xs,
+  },
+  reasonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.background,
+  },
+  reasonItemActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#F0F6F2',
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.borderDashed,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleActive: {
+    borderColor: colors.primary,
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+  },
+  reasonItemText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.body,
+    color: colors.textPrimary,
+  },
+  reasonItemTextActive: {
+    fontFamily: fonts.bodyBold,
+    color: colors.primaryDark,
+  },
+  reasonTextInput: {
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.body,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  modalCancelDangerBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.alertRed,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

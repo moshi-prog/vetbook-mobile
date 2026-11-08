@@ -21,15 +21,91 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { Vibration } from 'react-native';
+import { Vibration, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
 import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  updatePushToken,
 } from '../services/api';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
+
+// Configure notification behavior for lock screen, background, and foreground alerts
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+async function registerForPushNotificationsAsync() {
+  let token = null;
+
+  // Request notification permissions (required on Android 13+ and iOS for both local and remote notifications)
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.log('[NOTIFICATION] Permissions not granted for notifications (status: ' + finalStatus + ')');
+    }
+  } catch (e) {
+    // Gracefully handle permission check error
+  }
+
+  // Create Android notification channel safely
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#4A7C59',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    } catch (e) {
+      // Safe fallback for Expo Go / emulator channel issues
+    }
+  }
+
+  // In Expo Go (SDK 53+), remote FCM token generation is disabled; native local notifications are used instead
+  if (Constants?.appOwnership === 'expo' || Constants?.executionEnvironment === 'storeClient') {
+    console.log('[PUSH] Running in Expo Go: using native local system notifications');
+    return null;
+  }
+
+  if (Device.isDevice) {
+    try {
+      const projectId =
+        Constants?.expoConfig?.extra?.eas?.projectId ??
+        Constants?.easConfig?.projectId ??
+        '45c6f071-23ad-4887-8e0b-2c975198c3ae';
+
+      const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = pushTokenData?.data || null;
+
+      if (token) {
+        console.log('[PUSH] Expo Push Token obtained:', token);
+      }
+    } catch (e) {
+      console.warn('[PUSH] Error getting push token:', e.message);
+    }
+  } else {
+    console.log('[PUSH] Running on simulator/emulator; physical device required for native remote push');
+  }
+
+  return token;
+}
 
 const NotificationContext = createContext(null);
 
@@ -139,6 +215,23 @@ export const NotificationProvider = ({ children }) => {
               appointmentId: newest.data?.appointment_id,
             });
 
+            // Trigger real native operating system notification (banner, vibration, lockscreen, notification tray)
+            try {
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: newest.title || 'VetBook Clinic Update',
+                  body: newest.message || 'You have an update regarding your pet.',
+                  sound: 'default',
+                  data: newest.data || {},
+                },
+                trigger: null,
+              }).catch((e) => {
+                // Ignore background local scheduling errors
+              });
+            } catch (e) {
+              // Ignore background local scheduling errors
+            }
+
             // Gentle haptic feedback
             try {
               Vibration.vibrate(80);
@@ -157,7 +250,7 @@ export const NotificationProvider = ({ children }) => {
   );
 
   /**
-   * Periodic background polling: every 25 seconds when user is authenticated
+   * Periodic background polling: every 8 seconds when user is authenticated
    */
   useEffect(() => {
     if (!isAuthenticated) {
@@ -172,13 +265,60 @@ export const NotificationProvider = ({ children }) => {
     // Initial fetch on sign in
     fetchNotifications(true);
 
-    // 25s polling loop for real-time clinic updates
+    // 8-second polling loop for real-time clinic updates
     const pollInterval = setInterval(() => {
       fetchNotifications(true);
-    }, 25000);
+    }, 8000);
 
     return () => clearInterval(pollInterval);
   }, [isAuthenticated, fetchNotifications]);
+
+  /**
+   * Register push notifications on physical devices and attach push listeners
+   */
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) {
+        updatePushToken(token)
+          .then(() => {
+            console.log('[PUSH] Token successfully registered with backend');
+          })
+          .catch((err) => {
+            console.warn('[PUSH] Failed to save push token on backend:', err?.message || err);
+          });
+      }
+    });
+
+    let receivedSub;
+    let responseSub;
+
+    try {
+      receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+        const { title, body, data } = notification?.request?.content || {};
+        showNotificationBanner({
+          title: title || 'Clinic Update',
+          message: body || 'You have an update regarding your pet.',
+          type: data?.type || 'appointment',
+          appointmentId: data?.appointment_id,
+        });
+      });
+
+      responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+        try {
+          if (navigationRef.isReady()) {
+            navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+          }
+        } catch (err) {}
+      });
+    } catch (e) {}
+
+    return () => {
+      if (receivedSub) receivedSub.remove();
+      if (responseSub) responseSub.remove();
+    };
+  }, [isAuthenticated, showNotificationBanner]);
 
   /**
    * Mark individual notification as read

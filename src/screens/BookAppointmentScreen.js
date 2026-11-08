@@ -42,6 +42,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import api from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
+import { generateTimeSlots } from '../utils/timeSlots';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -53,6 +54,11 @@ const BRANCHES = [
     badge: 'Recommended',
     footer: 'Open now',
     open: true,
+    weekday_open: '09:00',
+    weekday_close: '18:00',
+    sunday_open: '10:00',
+    sunday_close: '16:00',
+    sunday_closed: false,
   },
   {
     id: 'batangas',
@@ -60,13 +66,14 @@ const BRANCHES = [
     address: 'N.F. Almario Building, Kumintang Ilaya',
     footer: 'Opens at 9:00 AM',
     open: false,
+    weekday_open: '09:00',
+    weekday_close: '18:00',
+    sunday_open: '10:00',
+    sunday_close: '16:00',
+    sunday_closed: false,
   },
 ];
 
-const TIME_SLOTS = [
-  '09:00', '09:30', '10:00', '10:30', '11:30',
-  '14:00', '14:30', '15:30', '16:00',
-];
 // Example of an already-booked slot (2:30 PM)
 const BOOKED_SLOTS = ['14:30'];
 
@@ -111,16 +118,18 @@ const formatSlot = (slot) => {
   return `${hour12}:${pad(m)} ${suffix}`;
 };
 
-/** Next `count` days starting today. Sundays are unavailable. */
-const generateDates = (count) => {
+/** Next `count` days starting today. Checks branch Sunday status. */
+const generateDates = (count, branch) => {
   const today = new Date();
   return Array.from({ length: count }, (_, i) => {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const isSunday = date.getDay() === 0;
+    const isAvailable = isSunday ? !branch?.sunday_closed : true;
     return {
       date,
       day: date.toLocaleDateString('en-US', { weekday: 'short' }),
       num: date.getDate(),
-      available: date.getDay() !== 0,
+      available: isAvailable,
     };
   });
 };
@@ -160,6 +169,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [pets, setPets]                     = useState([]);
+  const [branches, setBranches]             = useState(BRANCHES);
   const [selectedPetId, setSelectedPetId]   = useState(preselectedPetId || null);
   const [selectedPet, setSelectedPet]       = useState(preselectedPet || null);
   const [selectedBranch, setSelectedBranch] = useState('Mabini Branch');
@@ -175,7 +185,36 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const dateScrollRef = useRef(null);
   const dateScrollX   = useRef(0);
 
-  const dates = generateDates(daysCount);
+  // ── Fetch branch operating hours & details on mount ────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getBranches();
+        if (cancelled) return;
+        const branchList = res?.data?.data || res?.data || [];
+        if (Array.isArray(branchList) && branchList.length > 0) {
+          const merged = branchList.map((b) => ({
+            id: b.id,
+            name: b.name,
+            address: b.addressSummary || b.address,
+            badge: b.id === 'mabini' ? 'Recommended' : null,
+            footer: b.hoursWeekday || 'Open now',
+            open: true,
+            weekday_open: b.weekday_open || '09:00',
+            weekday_close: b.weekday_close || '18:00',
+            sunday_open: b.sunday_open || '10:00',
+            sunday_close: b.sunday_close || '16:00',
+            sunday_closed: !!b.sunday_closed,
+          }));
+          setBranches(merged);
+        }
+      } catch (err) {
+        // Fallback to initial BRANCHES
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Fetch pets on mount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -209,7 +248,21 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   }, []);
 
   // ── Derived values ─────────────────────────────────────────────────────────
-  const branchObj = BRANCHES.find((b) => b.name === selectedBranch) || BRANCHES[0];
+  const branchObj = branches.find((b) => b.name === selectedBranch) || branches[0];
+
+  const dates = generateDates(daysCount, branchObj);
+
+  // Dynamic Time Slots based on branch operating hours
+  const { closed: isClinicClosed, slots: availableSlots } = React.useMemo(() => {
+    return generateTimeSlots(branchObj, selectedDate);
+  }, [branchObj, selectedDate]);
+
+  // Reset selectedTime if it becomes invalid under new operating hours
+  useEffect(() => {
+    if (selectedTime && !availableSlots.includes(selectedTime)) {
+      setSelectedTime(null);
+    }
+  }, [availableSlots, selectedTime]);
 
   // Progress: first incomplete step is the "current" one
   const currentStep = !selectedPetId ? 1 : !selectedDate ? 2 : !selectedTime ? 3 : 4;
@@ -455,7 +508,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
           {/* ── 4. Select Branch ──────────────────────────────────────── */}
           <View style={styles.section}>
             <SectionHeading title="Select Branch" />
-            {BRANCHES.map((b) => {
+            {branches.map((b) => {
               const isSelected = selectedBranch === b.name;
               return (
                 <TouchableOpacity
@@ -558,40 +611,58 @@ const BookAppointmentScreen = ({ route, navigation }) => {
           {/* ── 6. Choose Time ────────────────────────────────────────── */}
           <View style={styles.section}>
             <SectionHeading title="Choose Time" />
-            <View style={styles.timeGrid}>
-              {TIME_SLOTS.map((slot) => {
-                const booked = BOOKED_SLOTS.includes(slot);
-                const past = isSlotPast(slot);
-                const disabled = booked || past;
-                const isSelected = selectedTime === slot && !disabled;
-                return (
-                  <TouchableOpacity
-                    key={slot}
-                    style={[
-                      styles.timeSlot,
-                      isSelected && styles.timeSlotSelected,
-                      disabled && styles.timeSlotDisabled,
-                    ]}
-                    activeOpacity={0.85}
-                    disabled={disabled}
-                    onPress={() => handleSelectTime(slot)}
-                    accessibilityLabel={`${formatSlot(slot)}${booked ? ', booked' : ''}`}
-                  >
-                    {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                    <Text
+            {isClinicClosed ? (
+              <View style={styles.closedCard}>
+                <Ionicons name="calendar-outline" size={24} color="#BA1A1A" />
+                <Text style={styles.closedTitle}>Clinic Closed on this day</Text>
+                <Text style={styles.closedSub}>
+                  {selectedBranch} is closed on this day. Please select another date.
+                </Text>
+              </View>
+            ) : availableSlots.length === 0 ? (
+              <View style={styles.closedCard}>
+                <Ionicons name="time-outline" size={24} color={colors.textSecondary} />
+                <Text style={styles.closedTitle}>No Slots Available</Text>
+                <Text style={styles.closedSub}>
+                  Please choose a date to see operating hours and available time slots.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.timeGrid}>
+                {availableSlots.map((slot) => {
+                  const booked = BOOKED_SLOTS.includes(slot);
+                  const past = isSlotPast(slot);
+                  const disabled = booked || past;
+                  const isSelected = selectedTime === slot && !disabled;
+                  return (
+                    <TouchableOpacity
+                      key={slot}
                       style={[
-                        styles.timeText,
-                        isSelected && styles.timeTextSelected,
-                        disabled && styles.timeTextDisabled,
-                        booked && styles.timeTextBooked,
+                        styles.timeSlot,
+                        isSelected && styles.timeSlotSelected,
+                        disabled && styles.timeSlotDisabled,
                       ]}
+                      activeOpacity={0.85}
+                      disabled={disabled}
+                      onPress={() => handleSelectTime(slot)}
+                      accessibilityLabel={`${formatSlot(slot)}${booked ? ', booked' : ''}`}
                     >
-                      {formatSlot(slot)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                      {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                      <Text
+                        style={[
+                          styles.timeText,
+                          isSelected && styles.timeTextSelected,
+                          disabled && styles.timeTextDisabled,
+                          booked && styles.timeTextBooked,
+                        ]}
+                      >
+                        {formatSlot(slot)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           {/* ── 7. Reason for Visit ───────────────────────────────────── */}
@@ -1040,6 +1111,27 @@ const styles = StyleSheet.create({
   timeTextSelected: { color: colors.white },
   timeTextDisabled: { color: colors.textMuted },
   timeTextBooked: { textDecorationLine: 'line-through' },
+  closedCard: {
+    backgroundColor: '#FFF0F0',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    borderRadius: radii.md,
+    padding: spacing.base,
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: spacing.xs,
+  },
+  closedTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.body,
+    color: '#BA1A1A',
+  },
+  closedSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
 
   // ── Reason chips ─────────────────────────────────────────────────────────
   chipRow: { gap: spacing.sm, paddingRight: spacing.base },

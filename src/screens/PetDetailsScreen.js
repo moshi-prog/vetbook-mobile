@@ -97,6 +97,13 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+const formatLongDate = (value) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
 /** Normalise the records response ({records}, {medical_records}, {data} or []). */
 const extractList = (data, keys) => {
   if (Array.isArray(data)) return data;
@@ -157,6 +164,8 @@ const PetDetailsScreen = ({ route, navigation }) => {
   const [refreshing, setRefreshing]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [activeTab, setActiveTab]           = useState('Overview');
+  const [selectedConsultation, setSelectedConsultation] = useState(null);
+  const [consultationModalVisible, setConsultationModalVisible] = useState(false);
 
   // Delete Pet Dialog States
   const [deleteDialogVisible, setDeleteDialogVisible]   = useState(false);
@@ -334,12 +343,10 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   const handleSeeAll = () => Alert.alert('Medical Records', 'Full history coming soon!');
 
-  const handleRecordPress = (rec) =>
-    Alert.alert(
-      rec.diagnosis || 'General Consultation',
-      [rec.treatment, rec.prescriptions, rec.notes].filter(Boolean).join('\n\n') ||
-        'No additional details recorded.',
-    );
+  const handleRecordPress = (rec) => {
+    setSelectedConsultation(rec);
+    setConsultationModalVisible(true);
+  };
 
   // ── Loading / missing guards ───────────────────────────────────────────────
   if (loading) {
@@ -417,6 +424,75 @@ const PetDetailsScreen = ({ route, navigation }) => {
         </View>
       </View>
 
+      {/* Latest Consultation Summary Card */}
+      {records.length > 0 && (
+        <>
+          <View style={[styles.sectionHeaderRow, styles.sectionTitleSpaced]}>
+            <Text style={styles.sectionTitle}>Latest Consultation</Text>
+            <TouchableOpacity onPress={() => setActiveTab('Medical Records')} accessibilityLabel="View all consultations">
+              <Text style={styles.seeAll}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.latestConsultCard}
+            activeOpacity={0.88}
+            onPress={() => handleRecordPress(records[0])}
+            accessibilityLabel="View latest consultation details"
+          >
+            <View style={styles.latestConsultTop}>
+              <View style={styles.latestConsultIcon}>
+                <Ionicons name="medical" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.latestConsultDate}>
+                  {formatDate(records[0].consultation_date).toUpperCase()}
+                </Text>
+                <Text style={styles.latestConsultTitle} numberOfLines={1}>
+                  {records[0].diagnosis || 'General Consultation'}
+                </Text>
+              </View>
+              <View style={styles.latestConsultVetBadge}>
+                <Ionicons name="person-outline" size={11} color={colors.textSecondary} />
+                <Text style={styles.latestConsultVetText} numberOfLines={1}>
+                  {records[0].veterinarian || 'Clinic Staff'}
+                </Text>
+              </View>
+            </View>
+
+            {records[0].treatment ? (
+              <Text style={styles.latestConsultDesc} numberOfLines={2}>
+                {records[0].treatment}
+              </Text>
+            ) : null}
+
+            <View style={styles.recordBadgesRow}>
+              {records[0].prescriptions ? (
+                <View style={styles.recordRxBadge}>
+                  <Ionicons name="bandage-outline" size={12} color={colors.primaryDeep} />
+                  <Text style={styles.recordRxText} numberOfLines={1}>
+                    Rx: {records[0].prescriptions}
+                  </Text>
+                </View>
+              ) : null}
+
+              {records[0].next_visit_date ? (
+                <View style={styles.recordFollowUpBadge}>
+                  <Ionicons name="calendar-outline" size={12} color={colors.amberDark} />
+                  <Text style={styles.recordFollowUpText}>
+                    Follow-up: {formatDate(records[0].next_visit_date)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.latestConsultFooter}>
+              <Text style={styles.recordViewDetailsText}>View Full Consultation Details</Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
+        </>
+      )}
+
       {/* Primary Care Clinic */}
       <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Primary Care Clinic</Text>
       <View style={styles.clinicCard}>
@@ -474,17 +550,46 @@ const PetDetailsScreen = ({ route, navigation }) => {
             activeOpacity={0.85}
             onPress={() => handleRecordPress(rec)}
           >
-            <Text style={styles.recordDate}>{formatDate(rec.consultation_date).toUpperCase()}</Text>
-            <Text style={styles.recordTitle}>{rec.diagnosis || 'General Consultation'}</Text>
-            <Text style={styles.recordDesc} numberOfLines={3}>
-              {rec.treatment || rec.notes || 'No additional details recorded.'}
-            </Text>
-            <View style={styles.recordFooter}>
+            <View style={styles.recordTopRow}>
+              <Text style={styles.recordDate}>{formatDate(rec.consultation_date).toUpperCase()}</Text>
               <View style={styles.recordVetRow}>
-                <Ionicons name="person-outline" size={13} color={colors.textMuted} />
-                <Text style={styles.recordVet}>{rec.veterinarian || 'Clinic Staff'}</Text>
+                <Ionicons name="person-outline" size={12} color={colors.textMuted} />
+                <Text style={styles.recordVet} numberOfLines={1}>{rec.veterinarian || 'Clinic Staff'}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.borderDashed} />
+            </View>
+
+            <Text style={styles.recordTitle}>{rec.diagnosis || 'General Consultation'}</Text>
+
+            <Text style={styles.recordDesc} numberOfLines={2}>
+              {rec.treatment || rec.notes || 'Tap to view full consultation details.'}
+            </Text>
+
+            {/* Prescriptions & Follow-up Badges */}
+            {(rec.prescriptions || rec.next_visit_date) ? (
+              <View style={styles.recordBadgesRow}>
+                {rec.prescriptions ? (
+                  <View style={styles.recordRxBadge}>
+                    <Ionicons name="bandage-outline" size={12} color={colors.primaryDeep} />
+                    <Text style={styles.recordRxText} numberOfLines={1}>
+                      Rx: {rec.prescriptions}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {rec.next_visit_date ? (
+                  <View style={styles.recordFollowUpBadge}>
+                    <Ionicons name="calendar-outline" size={12} color={colors.amberDark} />
+                    <Text style={styles.recordFollowUpText}>
+                      Follow-up: {formatDate(rec.next_visit_date)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View style={styles.recordFooter}>
+              <Text style={styles.recordViewDetailsText}>View Full Consultation Details</Text>
+              <Ionicons name="chevron-forward" size={15} color={colors.primary} />
             </View>
           </TouchableOpacity>
         ))
@@ -842,6 +947,175 @@ const PetDetailsScreen = ({ route, navigation }) => {
             >
               <Text style={styles.contactModalCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Consultation Details Modal ────────────────────────────────────── */}
+      <Modal
+        visible={consultationModalVisible && Boolean(selectedConsultation)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConsultationModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setConsultationModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.consultModalContainer}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {selectedConsultation ? (
+              <>
+                {/* Modal Header */}
+                <View style={styles.consultModalHeader}>
+                  <View style={styles.consultModalHeaderLeft}>
+                    <View style={styles.consultModalBadge}>
+                      <Ionicons name="medical" size={20} color={colors.white} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.consultModalTitle}>Consultation Details</Text>
+                      <Text style={styles.consultModalSubtitle} numberOfLines={1}>
+                        {formatLongDate(selectedConsultation.consultation_date)} &bull; {selectedConsultation.veterinarian || 'BK Petaholic Staff'}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setConsultationModalVisible(false)}
+                    style={styles.consultModalCloseBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel="Close consultation details"
+                  >
+                    <Ionicons name="close" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Modal Body */}
+                <ScrollView
+                  style={styles.consultModalScroll}
+                  contentContainerStyle={styles.consultModalBody}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Section 1: Diagnosis */}
+                  <View style={styles.consultSection}>
+                    <View style={styles.consultSectionLabelRow}>
+                      <Ionicons name="fitness-outline" size={13} color={colors.primary} />
+                      <Text style={styles.consultSectionLabel}>DIAGNOSIS</Text>
+                    </View>
+                    <View style={styles.consultCard}>
+                      <Text style={styles.consultBoldText}>
+                        {selectedConsultation.diagnosis || 'General Consultation'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Section 2: Treatment */}
+                  <View style={styles.consultSection}>
+                    <View style={styles.consultSectionLabelRow}>
+                      <Ionicons name="git-commit-outline" size={13} color={colors.primary} />
+                      <Text style={styles.consultSectionLabel}>TREATMENT & PROCEDURES</Text>
+                    </View>
+                    <View style={styles.consultCard}>
+                      {selectedConsultation.treatment ? (
+                        <Text style={styles.consultText}>{selectedConsultation.treatment}</Text>
+                      ) : (
+                        <Text style={styles.consultMutedText}>None specified</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Section 3: Prescriptions */}
+                  <View style={styles.consultSection}>
+                    <View style={styles.consultSectionLabelRow}>
+                      <Ionicons name="bandage-outline" size={13} color={colors.primary} />
+                      <Text style={styles.consultSectionLabel}>PRESCRIPTIONS & MEDICATION</Text>
+                    </View>
+                    <View style={[styles.consultCard, selectedConsultation.prescriptions && styles.consultCardRx]}>
+                      {selectedConsultation.prescriptions ? (
+                        <View style={styles.consultRxRow}>
+                          <Ionicons name="medkit" size={16} color={colors.primary} style={{ marginTop: 2 }} />
+                          <Text style={styles.consultRxText}>
+                            {selectedConsultation.prescriptions}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.consultMutedText}>No prescriptions issued</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Section 4: Clinical Notes & Advice */}
+                  <View style={styles.consultSection}>
+                    <View style={styles.consultSectionLabelRow}>
+                      <Ionicons name="document-text-outline" size={13} color={colors.primary} />
+                      <Text style={styles.consultSectionLabel}>DOCTOR'S NOTES & ADVICE</Text>
+                    </View>
+                    <View style={styles.consultCard}>
+                      {selectedConsultation.notes ? (
+                        <Text style={styles.consultText}>{selectedConsultation.notes}</Text>
+                      ) : (
+                        <Text style={styles.consultMutedText}>No additional notes</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Section 5: Vaccinations Administered */}
+                  {selectedConsultation.vaccinations ? (
+                    (() => {
+                      const vaxes = String(selectedConsultation.vaccinations)
+                        .split(/[,;\n]/)
+                        .map((v) => v.trim())
+                        .filter(Boolean);
+                      if (vaxes.length === 0) return null;
+                      return (
+                        <View style={styles.consultSection}>
+                          <View style={styles.consultSectionLabelRow}>
+                            <Ionicons name="shield-checkmark-outline" size={13} color={colors.primary} />
+                            <Text style={styles.consultSectionLabel}>VACCINATIONS ADMINISTERED</Text>
+                          </View>
+                          <View style={styles.vaxChipWrap}>
+                            {vaxes.map((vx, i) => (
+                              <View key={i} style={styles.vaxChip}>
+                                <Ionicons name="medical" size={12} color={colors.primaryDeep} />
+                                <Text style={styles.vaxChipText}>{vx}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })()
+                  ) : null}
+
+                  {/* Section 6: Next Visit / Follow-up */}
+                  {selectedConsultation.next_visit_date ? (
+                    <View style={styles.followUpCard}>
+                      <Ionicons name="calendar" size={18} color={colors.amberDark} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.followUpLabel}>NEXT SCHEDULED FOLLOW-UP</Text>
+                        <Text style={styles.followUpDate}>
+                          {formatLongDate(selectedConsultation.next_visit_date)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </ScrollView>
+
+                {/* Modal Footer / Close Button */}
+                <View style={styles.consultModalFooter}>
+                  <TouchableOpacity
+                    style={styles.consultModalCloseActionBtn}
+                    activeOpacity={0.85}
+                    onPress={() => setConsultationModalVisible(false)}
+                    accessibilityLabel="Close consultation details"
+                  >
+                    <Text style={styles.consultModalCloseActionText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : null}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -1217,9 +1491,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.soft,
   },
+  recordTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   recordDate: {
     fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.xs,
     color: colors.amber,
     letterSpacing: 0.8,
   },
@@ -1234,6 +1514,44 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
+  recordBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginVertical: 4,
+  },
+  recordRxBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryPale,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  recordRxText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.primaryDeep,
+    flexShrink: 1,
+  },
+  recordFollowUpBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.amberLight,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+  },
+  recordFollowUpText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.amberDark,
+  },
   recordFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1243,16 +1561,86 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.divider,
   },
+  recordViewDetailsText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.primary,
+  },
   recordVetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flex: 1,
+    gap: 5,
   },
   recordVet: {
     fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+  },
+
+  // ── Latest Consultation Summary (Overview Tab) ───────────────────────────
+  latestConsultCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: spacing.base,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  latestConsultTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  latestConsultIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryPale,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  latestConsultDate: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.amber,
+    letterSpacing: 0.8,
+  },
+  latestConsultTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+    marginTop: 1,
+  },
+  latestConsultVetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.cardBeige,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+  },
+  latestConsultVetText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+  },
+  latestConsultDesc: {
+    fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.body,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  latestConsultFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
   },
 
   // ── Vaccinations ─────────────────────────────────────────────────────────
@@ -1568,6 +1956,181 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: fontSizes.md,
     color: colors.textSecondary,
+  },
+
+  // ── Consultation Details Modal ──────────────────────────────────────────
+  consultModalContainer: {
+    backgroundColor: colors.cardWarm,
+    borderRadius: radii.xl,
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+    overflow: 'hidden',
+  },
+  consultModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  consultModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  consultModalBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  consultModalTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.lg,
+    color: colors.textPrimary,
+  },
+  consultModalSubtitle: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  consultModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    backgroundColor: colors.cardBeige,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consultModalScroll: {
+    maxHeight: 460,
+  },
+  consultModalBody: {
+    padding: spacing.base,
+    gap: spacing.md,
+  },
+  consultSection: {
+    gap: 6,
+  },
+  consultSectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  consultSectionLabel: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    letterSpacing: 0.8,
+  },
+  consultCard: {
+    backgroundColor: colors.background,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  consultCardRx: {
+    backgroundColor: colors.primaryPale + '44',
+    borderColor: colors.primaryLight + '55',
+  },
+  consultText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.body,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  consultBoldText: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+  },
+  consultRxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  consultRxText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.body,
+    color: colors.primaryDeep,
+    lineHeight: 20,
+    flex: 1,
+  },
+  consultMutedText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.body,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+  },
+  vaxChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  vaxChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.primaryPale,
+    paddingVertical: 5,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.pill,
+  },
+  vaxChipText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.primaryDeep,
+  },
+  followUpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.amberLight,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.amber + '40',
+  },
+  followUpLabel: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.amberDark,
+    letterSpacing: 0.8,
+  },
+  followUpDate: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.md,
+    color: colors.amberDark,
+    marginTop: 2,
+  },
+  consultModalFooter: {
+    padding: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  consultModalCloseActionBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md - 2,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consultModalCloseActionText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.md,
+    color: colors.white,
   },
 });
 
