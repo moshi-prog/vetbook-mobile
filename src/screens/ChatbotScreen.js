@@ -57,7 +57,7 @@ const HISTORY_LIMIT = 5;
 
 const BOOK_ACTION = {
   type: 'book',
-  info: 'I can help you schedule a visit with one of our vets.',
+  info: 'I can help you schedule a clinic visit.',
   label: 'Book Now',
 };
 

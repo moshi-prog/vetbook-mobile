@@ -421,10 +421,10 @@ const MyPetsScreen = ({ navigation }) => {
                     style={styles.contactVetBtn}
                     activeOpacity={0.85}
                     onPress={() => setContactModalVisible(true)}
-                    accessibilityLabel="Contact Vet"
+                    accessibilityLabel="Contact Clinic"
                   >
                     <Ionicons name="call" size={15} color={colors.white} />
-                    <Text style={styles.contactVetBtnText}>Contact Vet</Text>
+                    <Text style={styles.contactVetBtnText}>Contact Clinic</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -470,7 +470,7 @@ const MyPetsScreen = ({ navigation }) => {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.contactModalTitle}>Contact BK Petaholic</Text>
                   <Text style={styles.contactModalSubtitle}>
-                    Choose a branch to call or consult our AI Vet Assistant.
+                    Choose a branch to call or consult our AI Assistant.
                   </Text>
                 </View>
               </View>
@@ -511,7 +511,7 @@ const MyPetsScreen = ({ navigation }) => {
                 </View>
               ))}
 
-              {/* Option 3: AI Vet Assistant */}
+              {/* Option 3: AI Assistant */}
               <TouchableOpacity
                 style={styles.chatOptionCard}
                 activeOpacity={0.85}
@@ -525,7 +525,7 @@ const MyPetsScreen = ({ navigation }) => {
                   <Ionicons name="chatbubbles" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.chatOptionContent}>
-                  <Text style={styles.chatOptionTitle}>AI Vet Assistant</Text>
+                  <Text style={styles.chatOptionTitle}>AI Assistant</Text>
                   <Text style={styles.chatOptionDesc}>24/7 instant guidance for pet care & wellness</Text>
                 </View>
                 <View style={styles.chatActionPill}>

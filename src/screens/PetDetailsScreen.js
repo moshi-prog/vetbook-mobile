@@ -51,13 +51,13 @@ import ThemedDialog from '../components/ThemedDialog';
 
 const TABS = ['Overview', 'Medical Records', 'Vaccinations'];
 
-// Placeholder clinic contact until a vets endpoint exists
-const PRIMARY_VET = {
-  name: 'Dr. Maria Santos',
-  title: 'Chief Veterinary Physician',
-  experience: '10+ Years Experience',
+// Placeholder clinic contact
+const CLINIC_INFO = {
+  name: 'BK Petaholic Animal Clinic',
+  title: 'Mabini & Batangas City Branches',
+  experience: 'Full-Service Pet Care',
   phone: '+63 2 1234 5678',
-  clinic: 'BK Petaholic Animal Clinic',
+  clinic: 'Batangas, Philippines',
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -321,7 +321,8 @@ const PetDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleCallVet = () => setContactModalVisible(true);
+  const handleCallClinic = () => setContactModalVisible(true);
+  const handleCallVet = handleCallClinic;
 
   const handleCallBranch = async (url, phone) => {
     try {
@@ -370,7 +371,6 @@ const PetDetailsScreen = ({ route, navigation }) => {
   const allergies   = parseAllergies(pet.medical_conditions);
   const microchipId = pet.microchip_id || pet.microchipId || null;
   const vaccines    = deriveVaccinations(records);
-  const attendingVet = records[0]?.veterinarian || PRIMARY_VET.name;
 
   const metaLine = [
     pet.species,
@@ -425,25 +425,25 @@ const PetDetailsScreen = ({ route, navigation }) => {
             <Ionicons name="medical-outline" size={22} color={colors.primary} />
           </View>
           <View style={styles.clinicInfo}>
-            <Text style={styles.vetName}>{PRIMARY_VET.name}</Text>
-            <Text style={styles.vetTitle}>{PRIMARY_VET.title}</Text>
+            <Text style={styles.vetName}>{CLINIC_INFO.name}</Text>
+            <Text style={styles.vetTitle}>{CLINIC_INFO.title}</Text>
             <View style={styles.expBadge}>
-              <Text style={styles.expBadgeText}>{PRIMARY_VET.experience}</Text>
+              <Text style={styles.expBadgeText}>{CLINIC_INFO.experience}</Text>
             </View>
           </View>
         </View>
         <View style={styles.clinicLocationRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.clinicLocation}>{PRIMARY_VET.clinic}</Text>
+          <Text style={styles.clinicLocation}>{CLINIC_INFO.clinic}</Text>
         </View>
         <TouchableOpacity
           style={styles.callBtn}
           activeOpacity={0.85}
-          onPress={handleCallVet}
-          accessibilityLabel="Contact veterinarian"
+          onPress={handleCallClinic}
+          accessibilityLabel="Contact clinic"
         >
           <Ionicons name="call-outline" size={16} color={colors.primary} />
-          <Text style={styles.callBtnText}>Contact Vet</Text>
+          <Text style={styles.callBtnText}>Contact Clinic</Text>
         </TouchableOpacity>
       </View>
     </>
@@ -482,7 +482,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
             <View style={styles.recordFooter}>
               <View style={styles.recordVetRow}>
                 <Ionicons name="person-outline" size={13} color={colors.textMuted} />
-                <Text style={styles.recordVet}>{rec.veterinarian || 'Attending vet'}</Text>
+                <Text style={styles.recordVet}>{rec.veterinarian || 'Clinic Staff'}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.borderDashed} />
             </View>
@@ -769,7 +769,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.contactModalTitle}>Contact BK Petaholic</Text>
                   <Text style={styles.contactModalSubtitle}>
-                    Choose a branch to call or consult our AI Vet Assistant.
+                    Choose a branch to call or consult our AI Assistant.
                   </Text>
                 </View>
               </View>
@@ -809,7 +809,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
                   </TouchableOpacity>
                 </View>
               ))}
-              {/* Option 3: AI Vet Assistant */}
+              {/* Option 3: AI Assistant */}
               <TouchableOpacity
                 style={styles.chatOptionCard}
                 activeOpacity={0.85}
@@ -823,7 +823,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
                   <Ionicons name="chatbubbles" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.chatOptionContent}>
-                  <Text style={styles.chatOptionTitle}>AI Vet Assistant</Text>
+                  <Text style={styles.chatOptionTitle}>AI Assistant</Text>
                   <Text style={styles.chatOptionDesc}>24/7 instant guidance for pet care & wellness</Text>
                 </View>
                 <View style={styles.chatActionPill}>

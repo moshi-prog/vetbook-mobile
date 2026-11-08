@@ -80,7 +80,7 @@ const FAQS = [
   {
     id: 3,
     q: 'What core vaccinations does my pet need?',
-    a: 'Dogs typically require 5-in-1 / 6-in-1 core vaccines, Rabies, and Kennel Cough. Cats require 4-in-1 feline core vaccines and Rabies. Our veterinarians will evaluate your pet during consultation and prepare an individualized vaccination card.',
+    a: 'Dogs typically require 5-in-1 / 6-in-1 core vaccines, Rabies, and Kennel Cough. Cats require 4-in-1 feline core vaccines and Rabies. Our clinic staff will evaluate your pet during consultation and prepare an individualized vaccination card.',
   },
   {
     id: 4,
@@ -95,7 +95,7 @@ const FAQS = [
   {
     id: 6,
     q: 'Can I view my pet’s medical history digitally?',
-    a: 'Yes! Every consultation, prescription, treatment, and administered vaccination entered by our veterinarians is synced directly to your pet’s digital health passport in VetBook.',
+    a: 'Yes! Every consultation, prescription, treatment, and administered vaccination entered by clinic staff is synced directly to your pet’s digital health passport in VetBook.',
   },
 ];
 
@@ -161,6 +161,13 @@ const ProfileScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const [branches, setBranches] = useState(DEFAULT_CLINIC_BRANCHES);
+  const [clinic, setClinic] = useState({
+    name: 'BK Petaholic Animal Clinic',
+    tagline: 'Compassionate Care for Batangas Pets',
+    email: 'info@bkpetaholic.com',
+    accreditation: 'BAI-RVD-2024-0089',
+    logo_url: null,
+  });
   const [contactModalVisible, setContactModalVisible] = useState(false);
 
   // ── Fetch Branches ─────────────────────────────────────────────────────────
@@ -170,6 +177,12 @@ const ProfileScreen = () => {
       const list = res.data?.data;
       if (Array.isArray(list) && list.length > 0) {
         setBranches(list);
+      }
+      if (res.data?.clinic) {
+        setClinic((prev) => ({
+          ...prev,
+          ...res.data.clinic,
+        }));
       }
     } catch (err) {
       console.warn('Could not refresh clinic branch info:', err.message);
@@ -723,7 +736,7 @@ const ProfileScreen = () => {
                   </View>
                   <View style={styles.freedomItem}>
                     <Ionicons name="medkit-outline" size={16} color={colors.primary} />
-                    <Text style={styles.freedomText}><Text style={styles.bold}>3. Freedom from Pain, Injury &amp; Disease:</Text> Prompt veterinary diagnostics, treatment, and preventive care.</Text>
+                    <Text style={styles.freedomText}><Text style={styles.bold}>3. Freedom from Pain, Injury &amp; Disease:</Text> Prompt clinical diagnostics, treatment, and preventive care.</Text>
                   </View>
                   <View style={styles.freedomItem}>
                     <Ionicons name="happy-outline" size={16} color={colors.primary} />
@@ -755,7 +768,7 @@ const ProfileScreen = () => {
               <View style={styles.contentSection}>
                 <Text style={styles.contentSectionTitle}>Medical Confidentiality</Text>
                 <Text style={styles.contentBody}>
-                  Your pet’s health history, diagnostic results, and treatment plans are maintained under veterinary professional confidentiality. Records are accessible by you and authorized BK Petaholic veterinary medical officers.
+                  Your pet’s health history, diagnostic results, and treatment plans are maintained under professional confidentiality. Records are accessible by you and authorized BK Petaholic clinic medical officers.
                 </Text>
               </View>
             </ScrollView>
@@ -802,7 +815,7 @@ const ProfileScreen = () => {
               <View style={styles.contentSection}>
                 <Text style={styles.contentSectionTitle}>3. Emergency Triage</Text>
                 <Text style={styles.contentBody}>
-                  Our veterinarians reserve the right to prioritize critical, life-threatening emergency cases over non-urgent scheduled appointments. We appreciate your understanding and patience during unexpected emergency procedures.
+                  Our clinic staff reserves the right to prioritize critical, life-threatening emergency cases over non-urgent scheduled appointments. We appreciate your understanding and patience during unexpected emergency procedures.
                 </Text>
               </View>
 
@@ -841,32 +854,46 @@ const ProfileScreen = () => {
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Clinic Banner */}
               <View style={styles.aboutClinicCard}>
-                <View style={styles.aboutPawCircle}>
-                  <Ionicons name="paw" size={24} color={colors.primary} />
-                </View>
-                <Text style={styles.aboutClinicName}>BK Petaholic Animal Clinic</Text>
-                <Text style={styles.aboutClinicTagline}>Compassionate Care for Batangas Pets</Text>
-
-                <View style={styles.branchBox}>
-                  <Ionicons name="location" size={16} color={colors.primary} />
-                  <View style={styles.branchBoxText}>
-                    <Text style={styles.branchBoxTitle}>Mabini Branch</Text>
-                    <Text style={styles.branchBoxDesc}>142 Mabini St., Poblacion, Mabini, Batangas</Text>
+                {clinic.logo_url ? (
+                  <Image
+                    source={{ uri: clinic.logo_url }}
+                    style={styles.aboutClinicLogo}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.aboutPawCircle}>
+                    <Ionicons name="paw" size={24} color={colors.primary} />
                   </View>
-                </View>
+                )}
+                <Text style={styles.aboutClinicName}>{clinic.name || 'BK Petaholic Animal Clinic'}</Text>
+                <Text style={styles.aboutClinicTagline}>{clinic.tagline || 'Compassionate Care for Batangas Pets'}</Text>
 
-                <View style={styles.branchBox}>
-                  <Ionicons name="location" size={16} color={colors.primary} />
-                  <View style={styles.branchBoxText}>
-                    <Text style={styles.branchBoxTitle}>Batangas City Branch</Text>
-                    <Text style={styles.branchBoxDesc}>N.F. Almario Building, Kumintang Ilaya, Batangas City</Text>
+                {clinic.email ? (
+                  <View style={styles.aboutInfoRow}>
+                    <Ionicons name="mail" size={15} color={colors.primary} />
+                    <Text style={styles.aboutInfoText}>{clinic.email}</Text>
                   </View>
-                </View>
+                ) : null}
 
-                <View style={styles.hoursRow}>
-                  <Ionicons name="time-outline" size={15} color={colors.textSecondary} />
-                  <Text style={styles.hoursText}>Mon–Sat: 9:00 AM – 6:00 PM | Sun: 10:00 AM – 4:00 PM</Text>
-                </View>
+                {clinic.accreditation ? (
+                  <View style={styles.aboutBadgeRow}>
+                    <Ionicons name="ribbon" size={15} color={colors.amberDark} />
+                    <Text style={styles.aboutBadgeText}>License: {clinic.accreditation}</Text>
+                  </View>
+                ) : null}
+
+                {branches.map((b) => (
+                  <View key={b.id} style={styles.branchBox}>
+                    <Ionicons name="location" size={16} color={colors.primary} />
+                    <View style={styles.branchBoxText}>
+                      <Text style={styles.branchBoxTitle}>{b.name}</Text>
+                      <Text style={styles.branchBoxDesc}>{b.address}</Text>
+                      {b.hoursWeekday ? (
+                        <Text style={styles.branchBoxHours}>{b.hoursWeekday}{b.hoursSunday ? ` | ${b.hoursSunday}` : ''}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
               </View>
 
               {/* Capstone Credits */}
@@ -878,7 +905,7 @@ const ProfileScreen = () => {
                 <Text style={styles.capstoneTitle}>Batangas State University</Text>
                 <Text style={styles.capstoneSub}>The National Engineering University</Text>
                 <Text style={styles.capstoneDesc}>
-                  VetBook is proudly conceptualized and engineered in collaboration with the College of Informatics and Computing Sciences at Batangas State University. This capstone initiative aims to modernize veterinary clinical workflows and enhance community pet healthcare throughout the province of Batangas.
+                  VetBook is proudly conceptualized and engineered in collaboration with the College of Informatics and Computing Sciences at Batangas State University. This capstone initiative aims to modernize clinical workflows and enhance community pet healthcare throughout the province of Batangas.
                 </Text>
                 <View style={styles.versionRow}>
                   <Text style={styles.versionText}>Version 1.0.0 (Expo SDK 58)</Text>
@@ -1445,6 +1472,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
+  aboutClinicLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
+  },
   aboutClinicName: {
     fontFamily: fonts.heading,
     fontSize: fontSizes.xl,
@@ -1455,8 +1489,34 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
     textAlign: 'center',
+  },
+  aboutInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: 6,
+  },
+  aboutInfoText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+  },
+  aboutBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.amberPale,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+    marginBottom: spacing.base,
+  },
+  aboutBadgeText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.xs,
+    color: colors.amberDark,
   },
   branchBox: {
     flexDirection: 'row',
@@ -1479,6 +1539,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   branchBoxDesc: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  branchBoxHours: {
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.xs,
     color: colors.textSecondary,

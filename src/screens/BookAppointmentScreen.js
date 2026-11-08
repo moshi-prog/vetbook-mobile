@@ -638,7 +638,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             <View>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Anything the vet should know before the visit…"
+                placeholder="Anything the clinic staff should know before the visit…"
                 placeholderTextColor={colors.borderDashed}
                 value={notes}
                 onChangeText={setNotes}

@@ -42,11 +42,6 @@ const BRANCH_ADDRESSES = {
   'Batangas City Branch': 'N.F. Almario Building, Kumintang Ilaya',
 };
 
-const DEFAULT_VET = {
-  name: 'Dr. Maria Santos',
-  title: 'Chief Veterinary Physician',
-};
-
 const EST_DURATION_MIN = 45;
 const GRADIENT_COLORS = ['#4A7C59', '#78A886'];
 
@@ -145,9 +140,6 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
       ? `${petAge} ${Number(petAge) === 1 ? 'yr' : 'yrs'}`
       : null;
   const petMeta = [petSpecies, ageLabel].filter(Boolean).join(' • ');
-
-  // Vet
-  const vetName = appointment?.veterinarian || DEFAULT_VET.name;
 
   // Reason
   const reasonText = reason || appointment?.reason || 'General visit';
@@ -273,12 +265,6 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
               label="Date & Time"
               value={formattedDate}
               subValue={formatTimeRange(time)}
-            />
-            <InfoItem
-              icon="person-outline"
-              label="Veterinarian"
-              value={vetName}
-              subValue={DEFAULT_VET.title}
             />
             <InfoItem
               icon="clipboard-outline"

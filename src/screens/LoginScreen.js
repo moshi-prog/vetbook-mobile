@@ -170,7 +170,7 @@ const LoginScreen = ({ navigation }) => {
           <View style={styles.badgeWrapper}>
             <View style={styles.trustBadge}>
               <Ionicons name="paw-outline" size={12} color={colors.amber} />
-              <Text style={styles.trustBadgeText}>TRUSTED VETERINARY CARE</Text>
+              <Text style={styles.trustBadgeText}>TRUSTED PET CARE</Text>
             </View>
           </View>
 

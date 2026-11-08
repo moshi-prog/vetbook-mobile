@@ -188,6 +188,13 @@ const HomeScreen = ({ navigation }) => {
   // Branch Phone Call Modal State
   const [callModalVisible, setCallModalVisible] = useState(false);
   const [branches, setBranches] = useState(DEFAULT_CLINIC_BRANCHES);
+  const [clinic, setClinic] = useState({
+    name: 'BK Petaholic Animal Clinic',
+    tagline: 'Compassionate Care for Batangas Pets',
+    email: 'info@bkpetaholic.com',
+    accreditation: 'BAI-RVD-2024-0089',
+    logo_url: null,
+  });
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -226,6 +233,12 @@ const HomeScreen = ({ navigation }) => {
       const list = response.data?.data;
       if (Array.isArray(list) && list.length > 0) {
         setBranches(list);
+      }
+      if (response.data?.clinic) {
+        setClinic((prev) => ({
+          ...prev,
+          ...response.data.clinic,
+        }));
       }
     } catch (err) {
       console.warn('Could not refresh clinic branch info:', err.message);
@@ -389,7 +402,7 @@ const HomeScreen = ({ navigation }) => {
             style={[styles.quickCard, styles.quickCardPrimary]}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('BookAppointment')}
-            accessibilityLabel="Book a vet visit"
+            accessibilityLabel="Book an appointment"
           >
             <View style={[styles.quickIconCircle, styles.quickIconCirclePrimary]}>
               <Ionicons name="calendar-outline" size={20} color={colors.primary} />
@@ -416,18 +429,18 @@ const HomeScreen = ({ navigation }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Card 3 — Vet Chat */}
+          {/* Card 3 — AI Chat */}
           <TouchableOpacity
             style={styles.quickCard}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('Chat')}
-            accessibilityLabel="Vet AI chat"
+            accessibilityLabel="AI chat"
           >
             <View style={styles.quickIconCircle}>
               <Ionicons name="chatbubbles-outline" size={20} color={colors.primary} />
             </View>
             <View style={styles.quickCardText}>
-              <Text style={styles.quickCardTitle}>Vet Chat</Text>
+              <Text style={styles.quickCardTitle}>AI Chat</Text>
               <Text style={styles.quickCardSub}>24/7 AI assistant</Text>
             </View>
           </TouchableOpacity>
@@ -462,9 +475,9 @@ const HomeScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <Text style={styles.emergencyTitle}>Need Immediate Veterinary Care?</Text>
+          <Text style={styles.emergencyTitle}>Need Immediate Pet Care?</Text>
           <Text style={styles.emergencyDesc}>
-            In critical situations (breathing distress, trauma, poisoning), call us immediately so our veterinary team can prep the treatment room.
+            In critical situations (breathing distress, trauma, poisoning), call us immediately so our clinic team can prep the treatment room.
           </Text>
 
           <TouchableOpacity
@@ -599,12 +612,20 @@ const HomeScreen = ({ navigation }) => {
             {/* Clinic name + Open badge */}
             <View style={styles.clinicNameRow}>
               <View style={styles.clinicHeaderLeft}>
-                <View style={styles.clinicPawBadge}>
-                  <Ionicons name="paw" size={16} color={colors.primary} />
-                </View>
+                {clinic.logo_url ? (
+                  <Image
+                    source={{ uri: clinic.logo_url }}
+                    style={styles.clinicLogoImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.clinicPawBadge}>
+                    <Ionicons name="paw" size={16} color={colors.primary} />
+                  </View>
+                )}
                 <View style={styles.clinicHeaderTextWrap}>
-                  <Text style={styles.clinicName}>BK Petaholic Animal Clinic</Text>
-                  <Text style={styles.clinicSubtitle}>Compassionate Care for Batangas Pets</Text>
+                  <Text style={styles.clinicName}>{clinic.name || 'BK Petaholic Animal Clinic'}</Text>
+                  <Text style={styles.clinicSubtitle}>{clinic.tagline || 'Compassionate Care for Batangas Pets'}</Text>
                 </View>
               </View>
               <View style={styles.openBadge}>
@@ -1283,6 +1304,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryPale,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  clinicLogoImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
   },
   clinicHeaderTextWrap: {
     flex: 1,
