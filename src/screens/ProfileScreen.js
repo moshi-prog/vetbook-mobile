@@ -168,6 +168,7 @@ const ProfileScreen = () => {
     accreditation: 'BAI-RVD-2024-0089',
     logo_url: null,
   });
+  const [logoLoadError, setLogoLoadError] = useState(false);
   const [contactModalVisible, setContactModalVisible] = useState(false);
 
   // ── Fetch Branches ─────────────────────────────────────────────────────────
@@ -179,6 +180,7 @@ const ProfileScreen = () => {
         setBranches(list);
       }
       if (res.data?.clinic) {
+        setLogoLoadError(false);
         setClinic((prev) => ({
           ...prev,
           ...res.data.clinic,
@@ -854,11 +856,12 @@ const ProfileScreen = () => {
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Clinic Banner */}
               <View style={styles.aboutClinicCard}>
-                {clinic.logo_url ? (
+                {clinic.logo_url && !logoLoadError ? (
                   <Image
                     source={{ uri: clinic.logo_url }}
                     style={styles.aboutClinicLogo}
                     resizeMode="cover"
+                    onError={() => setLogoLoadError(true)}
                   />
                 ) : (
                   <View style={styles.aboutPawCircle}>
@@ -1473,10 +1476,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   aboutClinicLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
     marginBottom: spacing.sm,
   },
   aboutClinicName: {

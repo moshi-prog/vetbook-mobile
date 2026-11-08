@@ -195,6 +195,7 @@ const HomeScreen = ({ navigation }) => {
     accreditation: 'BAI-RVD-2024-0089',
     logo_url: null,
   });
+  const [logoLoadError, setLogoLoadError] = useState(false);
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -235,6 +236,7 @@ const HomeScreen = ({ navigation }) => {
         setBranches(list);
       }
       if (response.data?.clinic) {
+        setLogoLoadError(false);
         setClinic((prev) => ({
           ...prev,
           ...response.data.clinic,
@@ -612,11 +614,12 @@ const HomeScreen = ({ navigation }) => {
             {/* Clinic name + Open badge */}
             <View style={styles.clinicNameRow}>
               <View style={styles.clinicHeaderLeft}>
-                {clinic.logo_url ? (
+                {clinic.logo_url && !logoLoadError ? (
                   <Image
                     source={{ uri: clinic.logo_url }}
                     style={styles.clinicLogoImage}
                     resizeMode="cover"
+                    onError={() => setLogoLoadError(true)}
                   />
                 ) : (
                   <View style={styles.clinicPawBadge}>
@@ -1306,10 +1309,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clinicLogoImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   clinicHeaderTextWrap: {
     flex: 1,
