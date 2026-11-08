@@ -13,7 +13,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -41,6 +42,29 @@ import ThemedDialog from '../components/ThemedDialog';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const CLINIC_PHONE = '+63 917 123 4567';
+
+const DEFAULT_CLINIC_BRANCHES = [
+  {
+    id: 'mabini',
+    name: 'Mabini Branch',
+    address: '142 Mabini St., Poblacion, Mabini, Batangas',
+    addressSummary: '142 Mabini St., Poblacion, Mabini',
+    hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
+    hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
+    phone: '0917-123-4567',
+    dialUrl: 'tel:09171234567',
+  },
+  {
+    id: 'batangas_city',
+    name: 'Batangas City Branch',
+    address: 'N.F. Almario Bldg, Kumintang Ilaya, Batangas City',
+    addressSummary: 'N.F. Almario Bldg, Kumintang Ilaya',
+    hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
+    hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
+    phone: '0918-765-4321',
+    dialUrl: 'tel:09187654321',
+  },
+];
 
 const FAQS = [
   {
@@ -136,7 +160,31 @@ const ProfileScreen = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
-  const [branches, setBranches] = useState([]);
+  const [branches, setBranches] = useState(DEFAULT_CLINIC_BRANCHES);
+  const [contactModalVisible, setContactModalVisible] = useState(false);
+
+  // ── Fetch Branches ─────────────────────────────────────────────────────────
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await api.getBranches();
+      const list = res.data?.data;
+      if (Array.isArray(list) && list.length > 0) {
+        setBranches(list);
+      }
+    } catch (err) {
+      console.warn('Could not refresh clinic branch info:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchBranches();
+    }, [fetchBranches])
+  );
 
   // Accordion state for FAQs
   const [expandedFaqId, setExpandedFaqId] = useState(null);
@@ -320,17 +368,34 @@ const ProfileScreen = () => {
 
   // ── Support & Clinic Contact ───────────────────────────────────────────────
 
-  const handleContactClinic = () => {
-    const primaryBranch = branches[0];
-    const phoneToCall = primaryBranch?.phone || CLINIC_PHONE;
-    const dialUrl = primaryBranch?.dialUrl || `tel:${CLINIC_PHONE.replace(/\s/g, '')}`;
+  const handleDialBranch = async (branch) => {
+    const dialUrl = branch?.dialUrl || `tel:${(branch?.phone || CLINIC_PHONE).replace(/[^0-9+]/g, '')}`;
+    try {
+      await Linking.openURL(dialUrl);
+    } catch (err) {
+      showDialog('Phone Call', `Unable to open phone dialer. You can call ${branch?.phone || CLINIC_PHONE} directly.`, 'error');
+    }
+  };
 
-    showConfirm({
-      title: 'Contact Clinic',
-      message: `Call BK Petaholic Animal Clinic${primaryBranch ? ` (${primaryBranch.name})` : ''} at ${phoneToCall}?`,
-      confirmLabel: 'Call Now',
-      onConfirm: () => Linking.openURL(dialUrl).catch(() => {}),
-    });
+  const handleContactClinic = () => {
+    if (branches && branches.length > 1) {
+      setContactModalVisible(true);
+    } else if (branches && branches.length === 1) {
+      const b = branches[0];
+      showConfirm({
+        title: 'Contact Clinic',
+        message: `Call BK Petaholic Animal Clinic (${b.name}) at ${b.phone}?`,
+        confirmLabel: 'Call Now',
+        onConfirm: () => handleDialBranch(b),
+      });
+    } else {
+      showConfirm({
+        title: 'Contact Clinic',
+        message: `Call BK Petaholic Animal Clinic at ${CLINIC_PHONE}?`,
+        confirmLabel: 'Call Now',
+        onConfirm: () => Linking.openURL(`tel:${CLINIC_PHONE.replace(/[^0-9+]/g, '')}`).catch(() => {}),
+      });
+    }
   };
 
   const handleLogout = () => {
@@ -821,6 +886,90 @@ const ProfileScreen = () => {
                 </View>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: Contact Clinic / Branch Picker                                */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      <Modal
+        visible={contactModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setContactModalVisible(false)}
+      >
+        <View style={styles.callModalOverlay}>
+          <View style={styles.callModalCard}>
+            {/* Header */}
+            <View style={styles.callModalHeader}>
+              <View style={styles.callModalHeaderLeft}>
+                <View style={styles.callModalIconCircle}>
+                  <Ionicons name="call" size={18} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.callModalTitle}>Contact BK Petaholic</Text>
+                  <Text style={styles.callModalSubtitle}>Select a branch to open phone dialer</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setContactModalVisible(false)}
+                style={styles.callModalCloseBtn}
+                accessibilityLabel="Close call modal"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Branch Options */}
+            <View style={styles.callOptionsList}>
+              {branches.map((b) => (
+                <TouchableOpacity
+                  key={b.id || b.name}
+                  style={styles.callOptionCard}
+                  activeOpacity={0.82}
+                  onPress={() => {
+                    setContactModalVisible(false);
+                    handleDialBranch(b);
+                  }}
+                  accessibilityLabel={`Call ${b.name} at ${b.phone}`}
+                >
+                  <View style={styles.callOptionContent}>
+                    <View style={styles.callOptionTitleRow}>
+                      <Ionicons name="location" size={15} color={colors.primary} />
+                      <Text style={styles.callOptionBranchName}>{b.name}</Text>
+                    </View>
+                    <Text style={styles.callOptionAddress}>{b.addressSummary || b.address}</Text>
+                    <View style={styles.callOptionPhoneRow}>
+                      <Ionicons name="call-outline" size={13} color={colors.primary} />
+                      <Text style={styles.callOptionPhoneText}>{b.phone}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.callDialIconWrap}>
+                    <Ionicons name="call" size={16} color={colors.white} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Emergency note */}
+            <View style={styles.callModalNoteRow}>
+              <Ionicons name="alert-circle-outline" size={14} color={colors.alertRed} />
+              <Text style={styles.callModalNoteText}>
+                For critical emergencies, please call ahead so our staff can prepare triage.
+              </Text>
+            </View>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              style={styles.callModalCancelBtn}
+              activeOpacity={0.85}
+              onPress={() => setContactModalVisible(false)}
+              accessibilityLabel="Cancel"
+            >
+              <Text style={styles.callModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1392,6 +1541,148 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: spacing.md,
   },
+  // ── Branch Phone Call Modal Styles ─────────────────────────────────────────
+  callModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.base,
+  },
+  callModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.background,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  callModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  callModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  callModalIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryPale,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callModalTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.lg,
+    color: colors.textPrimary,
+  },
+  callModalSubtitle: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  callModalCloseBtn: {
+    padding: 4,
+  },
+  callOptionsList: {
+    marginVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  callOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.cardWarm,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.soft,
+  },
+  callOptionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  callOptionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  callOptionBranchName: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+  },
+  callOptionAddress: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    marginLeft: 21,
+  },
+  callOptionPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 21,
+    marginTop: 2,
+  },
+  callOptionPhoneText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.sm,
+    color: colors.primaryDeep,
+  },
+  callDialIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
+  },
+  callModalNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.alertRedLight,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
+  },
+  callModalNoteText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.alertRedDark,
+    flex: 1,
+    lineHeight: 16,
+  },
+  callModalCancelBtn: {
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.cardWarm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callModalCancelText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+  },
+
   versionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
