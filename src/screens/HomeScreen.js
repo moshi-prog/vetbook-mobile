@@ -179,7 +179,7 @@ const DEFAULT_CLINIC_BRANCHES = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const HomeScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [appointments, setAppointments] = useState([]);
@@ -196,6 +196,7 @@ const HomeScreen = ({ navigation }) => {
     logo_url: null,
   });
   const [logoLoadError, setLogoLoadError] = useState(false);
+  const [userAvatarError, setUserAvatarError] = useState(false);
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -251,21 +252,22 @@ const HomeScreen = ({ navigation }) => {
     fetchBranches();
   }, [fetchBranches]);
 
-  // Re-fetch appointments, notifications, and branch hotlines whenever Home tab is focused
+  // Re-fetch user profile, appointments, notifications, and branch hotlines whenever Home tab is focused
   useFocusEffect(
     useCallback(() => {
+      refreshUser?.();
       fetchAppointments();
       fetchNotifications();
       fetchBranches();
-    }, [fetchAppointments, fetchNotifications, fetchBranches])
+    }, [refreshUser, fetchAppointments, fetchNotifications, fetchBranches])
   );
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchAppointments(), fetchNotifications(), fetchBranches()]);
+    await Promise.all([refreshUser?.(), fetchAppointments(), fetchNotifications(), fetchBranches()]);
     setRefreshing(false);
-  }, [fetchAppointments, fetchNotifications, fetchBranches]);
+  }, [refreshUser, fetchAppointments, fetchNotifications, fetchBranches]);
 
   const handleOpenNotifications = async () => {
     setNotifModalVisible(true);
@@ -303,6 +305,11 @@ const HomeScreen = ({ navigation }) => {
   // ── Derived values ─────────────────────────────────────────────────────────
   const greeting   = getGreeting();
   const firstName  = getFirstName(user?.name || user?.user?.name);
+  const userAvatarUrl = user?.avatar_url || user?.user?.avatar_url || null;
+
+  useEffect(() => {
+    setUserAvatarError(false);
+  }, [userAvatarUrl]);
 
   // Show upcoming appointments if status is 'approved' OR 'pending' (today or future dates)
   const now = new Date();
@@ -374,9 +381,18 @@ const HomeScreen = ({ navigation }) => {
             accessibilityLabel="Profile"
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={styles.avatarInitial}>
-              {firstName.charAt(0).toUpperCase()}
-            </Text>
+            {userAvatarUrl && !userAvatarError ? (
+              <Image
+                source={{ uri: userAvatarUrl }}
+                style={styles.headerAvatarImage}
+                resizeMode="cover"
+                onError={() => setUserAvatarError(true)}
+              />
+            ) : (
+              <Text style={styles.avatarInitial}>
+                {firstName.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -958,6 +974,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: colors.primaryLight,
+    overflow: 'hidden',
+  },
+  headerAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 9999,
   },
   avatarInitial: {
     fontFamily: fonts.headingBold,
