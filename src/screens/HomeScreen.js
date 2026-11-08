@@ -335,9 +335,18 @@ const HomeScreen = ({ navigation }) => {
       <View style={styles.appBar}>
         {/* Left: paw badge + wordmark */}
         <View style={styles.appBarLeft}>
-          <View style={styles.pawBadge}>
-            <Ionicons name="paw-outline" size={16} color={colors.white} />
-          </View>
+          {clinic.logo_url && !logoLoadError ? (
+            <Image
+              source={{ uri: clinic.logo_url }}
+              style={styles.appBarLogo}
+              resizeMode="cover"
+              onError={() => setLogoLoadError(true)}
+            />
+          ) : (
+            <View style={styles.pawBadge}>
+              <Ionicons name="paw-outline" size={16} color={colors.white} />
+            </View>
+          )}
           <Text style={styles.wordmark}>VetBook</Text>
         </View>
 
@@ -893,6 +902,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,  // #78A886
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  appBarLogo: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   wordmark: {
     fontFamily: fonts.headingBold,
