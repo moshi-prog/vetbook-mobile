@@ -136,6 +136,7 @@ const ProfileScreen = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [branches, setBranches] = useState([]);
 
   // Accordion state for FAQs
   const [expandedFaqId, setExpandedFaqId] = useState(null);
@@ -320,11 +321,15 @@ const ProfileScreen = () => {
   // ── Support & Clinic Contact ───────────────────────────────────────────────
 
   const handleContactClinic = () => {
+    const primaryBranch = branches[0];
+    const phoneToCall = primaryBranch?.phone || CLINIC_PHONE;
+    const dialUrl = primaryBranch?.dialUrl || `tel:${CLINIC_PHONE.replace(/\s/g, '')}`;
+
     showConfirm({
       title: 'Contact Clinic',
-      message: `Call BK Petaholic Animal Clinic at ${CLINIC_PHONE}?`,
+      message: `Call BK Petaholic Animal Clinic${primaryBranch ? ` (${primaryBranch.name})` : ''} at ${phoneToCall}?`,
       confirmLabel: 'Call Now',
-      onConfirm: () => Linking.openURL(`tel:${CLINIC_PHONE.replace(/\s/g, '')}`).catch(() => {}),
+      onConfirm: () => Linking.openURL(dialUrl).catch(() => {}),
     });
   };
 

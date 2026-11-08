@@ -131,24 +131,24 @@ const MyPetsScreen = ({ navigation }) => {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await fetchPets();
+      await Promise.all([fetchPets(), fetchBranches()]);
       setLoading(false);
     })();
-  }, [fetchPets]);
+  }, [fetchPets, fetchBranches]);
 
   useFocusEffect(
     useCallback(() => {
       fetchPets();
       fetchBranches();
-    }, [fetchPets])
+    }, [fetchPets, fetchBranches])
   );
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchPets();
+    await Promise.all([fetchPets(), fetchBranches()]);
     setRefreshing(false);
-  }, [fetchPets]);
+  }, [fetchPets, fetchBranches]);
 
   // ── Filtered list ──────────────────────────────────────────────────────────
   const filteredPets = pets.filter((pet) => {
@@ -510,55 +510,7 @@ const MyPetsScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               ))}
-              {false && (
-              <View style={styles.contactOptionCard}>
-                <View style={styles.contactOptionInfo}>
-                  <View style={styles.contactOptionTitleRow}>
-                    <Ionicons name="location" size={14} color={colors.primary} />
-                    <Text style={styles.contactOptionBranch}>Mabini Branch</Text>
-                  </View>
-                  <Text style={styles.contactOptionAddress}>142 Mabini St., Poblacion, Mabini</Text>
-                  <View style={styles.contactOptionPhoneRow}>
-                    <Ionicons name="call-outline" size={12} color={colors.textSecondary} />
-                    <Text style={styles.contactOptionPhone}>0917-123-4567</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.branchCallBtn}
-                  activeOpacity={0.85}
-                  onPress={() => handleCallBranch('tel:09171234567', '0917-123-4567')}
-                  accessibilityLabel="Call Mabini"
-                >
-                  <Ionicons name="call" size={13} color={colors.white} />
-                  <Text style={styles.branchCallBtnText}>Call Mabini</Text>
-                </TouchableOpacity>
-              </View>
 
-              {/* Branch 2: Batangas City Branch */}
-              <View style={styles.contactOptionCard}>
-                <View style={styles.contactOptionInfo}>
-                  <View style={styles.contactOptionTitleRow}>
-                    <Ionicons name="location" size={14} color={colors.primary} />
-                    <Text style={styles.contactOptionBranch}>Batangas City Branch</Text>
-                  </View>
-                  <Text style={styles.contactOptionAddress}>N.F. Almario Bldg, Kumintang Ilaya</Text>
-                  <View style={styles.contactOptionPhoneRow}>
-                    <Ionicons name="call-outline" size={12} color={colors.textSecondary} />
-                    <Text style={styles.contactOptionPhone}>0918-765-4321</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.branchCallBtn}
-                  activeOpacity={0.85}
-                  onPress={() => handleCallBranch('tel:09187654321', '0918-765-4321')}
-                  accessibilityLabel="Call Batangas City"
-                >
-                  <Ionicons name="call" size={13} color={colors.white} />
-                  <Text style={styles.branchCallBtnText}>Call Batangas City</Text>
-                </TouchableOpacity>
-              </View>
-
-              )}
               {/* Option 3: AI Vet Assistant */}
               <TouchableOpacity
                 style={styles.chatOptionCard}

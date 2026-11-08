@@ -38,6 +38,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -215,13 +216,6 @@ const PetDetailsScreen = ({ route, navigation }) => {
     }
   }, [petId]);
 
-  useEffect(() => {
-    (async () => {
-      await Promise.all([fetchPet(), fetchRecords(), fetchBranches()]);
-      setLoading(false);
-    })();
-  }, [fetchPet, fetchRecords]);
-
   const fetchBranches = useCallback(async () => {
     try {
       const res = await api.getBranches();
@@ -231,11 +225,24 @@ const PetDetailsScreen = ({ route, navigation }) => {
     } catch (err) {}
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      await Promise.all([fetchPet(), fetchRecords(), fetchBranches()]);
+      setLoading(false);
+    })();
+  }, [fetchPet, fetchRecords, fetchBranches]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchBranches();
+    }, [fetchBranches])
+  );
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([fetchPet(), fetchRecords(), fetchBranches()]);
     setRefreshing(false);
-  }, [fetchPet, fetchRecords]);
+  }, [fetchPet, fetchRecords, fetchBranches]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const handleEdit = () => navigation.navigate('AddPet', { petId, pet });
@@ -802,55 +809,6 @@ const PetDetailsScreen = ({ route, navigation }) => {
                   </TouchableOpacity>
                 </View>
               ))}
-              {false && (
-              <View style={styles.contactOptionCard}>
-                <View style={styles.contactOptionInfo}>
-                  <View style={styles.contactOptionTitleRow}>
-                    <Ionicons name="location" size={14} color={colors.primary} />
-                    <Text style={styles.contactOptionBranch}>Mabini Branch</Text>
-                  </View>
-                  <Text style={styles.contactOptionAddress}>142 Mabini St., Poblacion, Mabini</Text>
-                  <View style={styles.contactOptionPhoneRow}>
-                    <Ionicons name="call-outline" size={12} color={colors.textSecondary} />
-                    <Text style={styles.contactOptionPhone}>0917-123-4567</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.branchCallBtn}
-                  activeOpacity={0.85}
-                  onPress={() => handleCallBranch('tel:09171234567', '0917-123-4567')}
-                  accessibilityLabel="Call Mabini"
-                >
-                  <Ionicons name="call" size={13} color={colors.white} />
-                  <Text style={styles.branchCallBtnText}>Call Mabini</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Branch 2: Batangas City Branch */}
-              <View style={styles.contactOptionCard}>
-                <View style={styles.contactOptionInfo}>
-                  <View style={styles.contactOptionTitleRow}>
-                    <Ionicons name="location" size={14} color={colors.primary} />
-                    <Text style={styles.contactOptionBranch}>Batangas City Branch</Text>
-                  </View>
-                  <Text style={styles.contactOptionAddress}>N.F. Almario Bldg, Kumintang Ilaya</Text>
-                  <View style={styles.contactOptionPhoneRow}>
-                    <Ionicons name="call-outline" size={12} color={colors.textSecondary} />
-                    <Text style={styles.contactOptionPhone}>0918-765-4321</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.branchCallBtn}
-                  activeOpacity={0.85}
-                  onPress={() => handleCallBranch('tel:09187654321', '0918-765-4321')}
-                  accessibilityLabel="Call Batangas City"
-                >
-                  <Ionicons name="call" size={13} color={colors.white} />
-                  <Text style={styles.branchCallBtnText}>Call Batangas City</Text>
-                </TouchableOpacity>
-              </View>
-
-              )}
               {/* Option 3: AI Vet Assistant */}
               <TouchableOpacity
                 style={styles.chatOptionCard}
