@@ -17,38 +17,54 @@ export const AuthProvider = ({ children }) => {
         const storedToken = await storage.getToken();
         const storedUser = await storage.getUser();
 
-        if (storedToken) {
-          setToken(storedToken);
+        // Defensively unpack if storedUser was saved in legacy { user: { ... } } wrapper
+        const cachedUser = storedUser ? (storedUser.user || storedUser) : null;
+        const cachedValid = !!(cachedUser && cachedUser.name);
 
-          if (storedUser) {
-            // Defensively unpack if storedUser was saved in legacy { user: { ... } } wrapper
-            const initialUser = storedUser.user || storedUser;
-            setUser(initialUser);
-          }
+        const clearSessionState = async () => {
+          await storage.clearSession();
+          setToken(null);
+          setUser(null);
+        };
 
-          // Verify token is still valid and refresh user profile by hitting /me
+        if (!storedToken) {
+          // No token: ensure no orphan user data lingers
+          if (storedUser) await storage.clearSession();
+          setToken(null);
+          setUser(null);
+        } else {
+          // Token exists — verify and/or recover the user profile via /me
           try {
             const response = await api.getMe();
             const userData = response.data?.user ?? response.data;
-            if (userData) {
+            if (userData && userData.name) {
+              setToken(storedToken);
               setUser(userData);
               await storage.saveUser(userData);
+            } else {
+              console.warn('Invalid profile from /me, clearing stored session.');
+              await clearSessionState();
             }
           } catch (err) {
-            // Only clear session if server explicitly returns 401 Unauthorized (token invalid / expired)
-            if (err?.response?.status === 401) {
-              console.warn('Session expired (401), clearing stored session.');
-              await storage.clearSession();
-              setToken(null);
-              setUser(null);
+            if (err?.response?.status === 401 || !cachedValid) {
+              // Expired token, or no usable cached user to fall back on
+              console.warn('Session invalid, clearing stored session.');
+              await clearSessionState();
             } else {
-              // Network error or offline — retain stored session so user remains logged in
+              // Network error/offline with a valid cached user — keep session
               console.warn('Could not refresh session from /me endpoint, keeping stored user:', err?.message);
+              setToken(storedToken);
+              setUser(cachedUser);
             }
           }
         }
       } catch (err) {
         console.error('Error loading session:', err);
+        try {
+          await storage.clearSession();
+        } catch (_) {}
+        setToken(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -117,10 +133,16 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       // Even if server call fails, still clear local session
       console.error('Logout API error:', err);
+    } finally {
+      // Guaranteed local cleanup regardless of network outcome
+      try {
+        await storage.clearSession();
+      } catch (e) {
+        console.error('Clear session error:', e);
+      }
+      setToken(null);
+      setUser(null);
     }
-    await storage.clearSession();
-    setToken(null);
-    setUser(null);
   };
 
   // Refresh current user data (useful after profile updates)
@@ -150,7 +172,7 @@ export const AuthProvider = ({ children }) => {
     token,
     loading,
     error,
-    isAuthenticated: !!token,
+    isAuthenticated: !!(token && user),
     register,
     login,
     logout,

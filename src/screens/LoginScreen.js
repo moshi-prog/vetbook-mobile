@@ -102,10 +102,8 @@ const LoginScreen = ({ navigation }) => {
       const result = await login(email.trim().toLowerCase(), password);
 
       if (result.success) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
-        });
+        // AuthContext state change automatically swaps to the authenticated stack
+        return;
       } else {
         const msg = result.error || 'Invalid email or password.';
         setErrorMessage(msg);

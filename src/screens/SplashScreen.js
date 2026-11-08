@@ -44,14 +44,16 @@ const SplashScreen = ({ navigation }) => {
    * (e.g. fast hardware navigation) to prevent a no-op state update.
    */
   useEffect(() => {
+    // Rendered standalone (no navigation prop) by AppNavigator on cold start
+    if (!navigation) return;
     const timer = setTimeout(() => {
       if (isAuthenticated) {
-        navigation.reset({
+        navigation.reset?.({
           index: 0,
           routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
         });
       } else {
-        navigation.replace('Login');
+        navigation.replace?.('Login');
       }
     }, SPLASH_DURATION);
 
