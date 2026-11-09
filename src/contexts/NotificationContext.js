@@ -22,7 +22,6 @@ import React, {
   useEffect,
 } from 'react';
 import { Vibration, Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
@@ -35,17 +34,29 @@ import {
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
 
-// Configure notification behavior for lock screen, background, and foreground alerts
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Safely resolve expo-notifications without crashing if native module is absent
+let Notifications = null;
+try {
+  Notifications = require('expo-notifications');
+  if (Notifications && typeof Notifications.setNotificationHandler === 'function') {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  }
+} catch (e) {
+  console.log('[NOTIFICATIONS] Native module not present in current binary, using in-app banners:', e.message);
+}
 
 async function registerForPushNotificationsAsync() {
   let token = null;
+
+  if (!Notifications || typeof Notifications.getPermissionsAsync !== 'function') {
+    return null;
+  }
 
   // Request notification permissions (required on Android 13+ and iOS for both local and remote notifications)
   try {
@@ -216,20 +227,22 @@ export const NotificationProvider = ({ children }) => {
             });
 
             // Trigger real native operating system notification (banner, vibration, lockscreen, notification tray)
-            try {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: newest.title || 'VetBook Clinic Update',
-                  body: newest.message || 'You have an update regarding your pet.',
-                  sound: 'default',
-                  data: newest.data || {},
-                },
-                trigger: null,
-              }).catch((e) => {
+            if (Notifications && typeof Notifications.scheduleNotificationAsync === 'function') {
+              try {
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: newest.title || 'VetBook Clinic Update',
+                    body: newest.message || 'You have an update regarding your pet.',
+                    sound: 'default',
+                    data: newest.data || {},
+                  },
+                  trigger: null,
+                }).catch((e) => {
+                  // Ignore background local scheduling errors
+                });
+              } catch (e) {
                 // Ignore background local scheduling errors
-              });
-            } catch (e) {
-              // Ignore background local scheduling errors
+              }
             }
 
             // Gentle haptic feedback
@@ -294,25 +307,27 @@ export const NotificationProvider = ({ children }) => {
     let receivedSub;
     let responseSub;
 
-    try {
-      receivedSub = Notifications.addNotificationReceivedListener((notification) => {
-        const { title, body, data } = notification?.request?.content || {};
-        showNotificationBanner({
-          title: title || 'Clinic Update',
-          message: body || 'You have an update regarding your pet.',
-          type: data?.type || 'appointment',
-          appointmentId: data?.appointment_id,
+    if (Notifications && typeof Notifications.addNotificationReceivedListener === 'function') {
+      try {
+        receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+          const { title, body, data } = notification?.request?.content || {};
+          showNotificationBanner({
+            title: title || 'Clinic Update',
+            message: body || 'You have an update regarding your pet.',
+            type: data?.type || 'appointment',
+            appointmentId: data?.appointment_id,
+          });
         });
-      });
 
-      responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-        try {
-          if (navigationRef.isReady()) {
-            navigationRef.navigate('MainTabs', { screen: 'Bookings' });
-          }
-        } catch (err) {}
-      });
-    } catch (e) {}
+        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+          try {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+            }
+          } catch (err) {}
+        });
+      } catch (e) {}
+    }
 
     return () => {
       if (receivedSub) receivedSub.remove();
