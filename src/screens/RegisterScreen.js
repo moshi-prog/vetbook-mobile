@@ -157,8 +157,7 @@ const RegisterScreen = ({ navigation }) => {
       });
 
       if (result.success) {
-        // Registration succeeded — send user to Login to sign in
-        navigation.navigate('Login');
+        navigation.navigate('VerifyEmail', { email: email.trim().toLowerCase() });
       } else {
         Alert.alert('Registration Failed', result.error || 'Something went wrong. Please try again.');
       }

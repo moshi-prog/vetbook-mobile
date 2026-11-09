@@ -118,6 +118,18 @@ const LoginScreen = ({ navigation }) => {
       if (result.success) {
         // AuthContext state change automatically swaps to the authenticated stack
         return;
+      } else if (result.needsVerification) {
+        Alert.alert(
+          'Email Verification Required',
+          result.message || 'Your account is not verified yet. We have sent a verification code to your email.',
+          [
+            {
+              text: 'Verify Now',
+              onPress: () => navigation.navigate('VerifyEmail', { email: result.email || email.trim().toLowerCase() }),
+            },
+          ]
+        );
+        return;
       } else {
         const msg = result.error || 'Invalid email or password.';
         setErrorMessage(msg);

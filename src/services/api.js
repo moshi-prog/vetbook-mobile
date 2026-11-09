@@ -55,6 +55,8 @@ api.interceptors.response.use(
 
 export const register = (data) => api.post('/register', data);
 export const login = (data) => api.post('/login', data);
+export const verifyEmail = (email, code) => api.post('/verify-email', { email, code });
+export const resendVerificationCode = (email) => api.post('/resend-verification-code', { email });
 export const logout = () => api.post('/logout');
 export const getMe = () => api.get('/me');
 export const updateProfile = (data) => api.put('/user/profile', data);

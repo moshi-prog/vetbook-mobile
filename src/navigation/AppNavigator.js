@@ -27,6 +27,7 @@ import { navigationRef } from './navigationRef';
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 import AddPetScreen from '../screens/AddPetScreen';
 import PetDetailsScreen from '../screens/PetDetailsScreen';
 import BookAppointmentScreen from '../screens/BookAppointmentScreen';
@@ -71,6 +72,7 @@ const AppNavigator = ({ onLayout }) => {
           <Stack.Group>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

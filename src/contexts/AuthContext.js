@@ -78,6 +78,16 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await api.register(data);
+
+      if (response.data?.needs_verification) {
+        return {
+          success: true,
+          needsVerification: true,
+          email: response.data?.email || data.email,
+          message: response.data?.message,
+        };
+      }
+
       const newToken = response.data?.token;
       const newUser = response.data?.user ?? response.data;
 
@@ -116,12 +126,64 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, error: 'Invalid response from server' };
     } catch (err) {
+      if (err.response?.status === 403 && err.response?.data?.needs_verification) {
+        return {
+          success: false,
+          needsVerification: true,
+          email: err.response?.data?.email || email,
+          message: err.response?.data?.message,
+        };
+      }
       const message =
         err.response?.data?.message ||
         err.response?.data?.error ||
         'Invalid email or password.';
       setError(message);
       return { success: false, error: message };
+    }
+  };
+
+  // Verify email with 6-digit code
+  const verifyEmail = async (email, code) => {
+    setError(null);
+    try {
+      const response = await api.verifyEmail(email, code);
+      const newToken = response.data?.token;
+      const newUser = response.data?.user ?? response.data;
+
+      if (newToken && newUser) {
+        await storage.saveToken(newToken);
+        await storage.saveUser(newUser);
+        setToken(newToken);
+        setUser(newUser);
+        return { success: true, message: response.data?.message };
+      }
+      return { success: false, error: 'Invalid response from server' };
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Verification failed. Please check the code and try again.';
+      setError(message);
+      return { success: false, error: message };
+    }
+  };
+
+  // Resend 6-digit verification code
+  const resendVerificationCode = async (email) => {
+    try {
+      const response = await api.resendVerificationCode(email);
+      return { success: true, message: response.data?.message };
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Could not resend verification code. Please try again later.';
+      return {
+        success: false,
+        error: message,
+        retryAfter: err.response?.data?.retry_after,
+      };
     }
   };
 
@@ -175,6 +237,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!(token && user),
     register,
     login,
+    verifyEmail,
+    resendVerificationCode,
     logout,
     refreshUser,
     updateUserState,
