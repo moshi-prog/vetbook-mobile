@@ -45,6 +45,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import TermsModal from '../components/TermsModal';
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -70,6 +71,7 @@ const LoginScreen = ({ navigation }) => {
 
   // ── Forgot password modal state ───────────────────────────────────────────
   const [forgotModalVisible, setForgotModalVisible] = useState(false);
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetPhone, setResetPhone] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
@@ -406,6 +408,19 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+
+          {/* ── Terms & Agreement link ───────────────────────────────── */}
+          <View style={styles.termsRow}>
+            <Text style={styles.termsText}>
+              By signing in, you agree to our{' '}
+              <Text
+                style={styles.termsLink}
+                onPress={() => setTermsModalVisible(true)}
+              >
+                Terms & Agreement
+              </Text>
+            </Text>
+          </View>
         </ScrollView>
 
         {/* ── Reset Password Modal ────────────────────────────────────── */}
@@ -607,6 +622,14 @@ const LoginScreen = ({ navigation }) => {
           </KeyboardAvoidingView>
         </Modal>
       </KeyboardAvoidingView>
+
+      {/* ── Terms & Agreement Modal Prompt ─────────────────────────── */}
+      <TermsModal
+        visible={termsModalVisible}
+        onClose={() => setTermsModalVisible(false)}
+        title="Terms & Agreement"
+        subtitle="BK Petaholic Clinic terms & service policies"
+      />
     </SafeAreaView>
   );
 };
@@ -1000,6 +1023,24 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: colors.white,
     letterSpacing: 0.3,
+  },
+  termsRow: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  termsText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  termsLink: {
+    fontFamily: fonts.bodySemiBold,
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
 });
 

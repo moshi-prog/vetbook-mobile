@@ -41,6 +41,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import TermsModal from '../components/TermsModal';
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ const RegisterScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // ── Per-field error messages (null = no error) ─────────────────────────────
@@ -388,28 +390,38 @@ const RegisterScreen = ({ navigation }) => {
           )}
 
           {/* ── Terms & Conditions checkbox ────────────────────────────── */}
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setAgreedToTerms((v) => !v)}
-            activeOpacity={0.7}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: agreedToTerms }}
-          >
+          <View style={styles.termsRow}>
             {/* Custom checkbox */}
-            <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+            <TouchableOpacity
+              onPress={() => setAgreedToTerms((v) => !v)}
+              activeOpacity={0.7}
+              style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agreedToTerms }}
+            >
               {agreedToTerms && (
                 <Ionicons name="checkmark" size={12} color={colors.white} />
               )}
-            </View>
+            </TouchableOpacity>
 
             {/* Terms text */}
             <Text style={styles.termsText}>
               I agree to the{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() => setTermsModalVisible(true)}
+              >
+                Terms of Service
+              </Text>
               {' '}and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() => setTermsModalVisible(true)}
+              >
+                Privacy Policy
+              </Text>
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* ── CTA Button ────────────────────────────────────────────── */}
           <TouchableOpacity
@@ -447,6 +459,15 @@ const RegisterScreen = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── Terms & Agreement Modal Prompt ─────────────────────────── */}
+      <TermsModal
+        visible={termsModalVisible}
+        onClose={() => setTermsModalVisible(false)}
+        onAccept={() => setAgreedToTerms(true)}
+        showAcceptButton={!agreedToTerms}
+        acceptText="I Agree to Terms"
+      />
     </SafeAreaView>
   );
 };
