@@ -100,7 +100,8 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, error: 'Invalid response from server' };
     } catch (err) {
-      const message =
+      let message =
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join('\n') : null) ||
         err.response?.data?.message ||
         err.response?.data?.error ||
         'Registration failed. Please try again.';
