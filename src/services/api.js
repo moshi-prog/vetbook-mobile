@@ -16,8 +16,8 @@ const getApiUrl = () => {
     return 'https://vetbook-backend.onrender.com/api';
   }
 
-  // 3. Physical mobile devices (Expo Go / release builds): default to ngrok tunnel
-  return 'https://chance-circling-unrevised.ngrok-free.dev/api';
+  // 3. Physical mobile devices (Expo Go / release builds): default to live Render backend
+  return 'https://vetbook-backend.onrender.com/api';
 };
 
 const API_URL = getApiUrl();

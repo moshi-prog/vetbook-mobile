@@ -9,7 +9,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://chance-circling-unrevised.ngrok-free.dev/api"
+        "EXPO_PUBLIC_API_URL": "https://vetbook-backend.onrender.com/api"
       }
     },
     "production": {}
