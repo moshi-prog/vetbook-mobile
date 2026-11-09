@@ -8,8 +8,13 @@ const getApiUrl = () => {
   // 1. Explicit override via environment variable
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
 
-  // 2. Web browser: backend runs locally on same host
-  if (Platform.OS === 'web') return 'http://127.0.0.1:8000/api';
+  // 2. Web browser
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://127.0.0.1:8000/api';
+    }
+    return 'https://vetbook-backend.onrender.com/api';
+  }
 
   // 3. Physical mobile devices (Expo Go / release builds): default to ngrok tunnel
   return 'https://chance-circling-unrevised.ngrok-free.dev/api';
