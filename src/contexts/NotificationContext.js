@@ -6,9 +6,9 @@
  * Responsibilities:
  *  1. Manages global in-app notification banner state (`showNotificationBanner`, `hideNotificationBanner`).
  *  2. Renders <NotificationBanner /> globally at root level over all navigators.
- *  3. Performs periodic background polling (every 25s) for real-time admin updates
+ *  3. Performs periodic background polling (every 8s) for real-time clinic updates
  *     (e.g., appointment approved, rescheduled, or cancelled by clinic staff).
- *  4. Triggers animated banners and haptic vibration when new unread alerts arrive.
+ *  4. Triggers animated in-app banners and haptic vibration when new unread alerts arrive.
  *  5. Synchronizes unread counter and notification records across the app.
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -21,102 +21,15 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { Vibration, Platform } from 'react-native';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
+import { Vibration } from 'react-native';
 import { useAuth } from './AuthContext';
 import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
-  updatePushToken,
 } from '../services/api';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
-
-// Safely resolve expo-notifications without crashing if native module is absent
-let Notifications = null;
-try {
-  Notifications = require('expo-notifications');
-  if (Notifications && typeof Notifications.setNotificationHandler === 'function') {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-  }
-} catch (e) {
-  console.log('[NOTIFICATIONS] Native module not present in current binary, using in-app banners:', e.message);
-}
-
-async function registerForPushNotificationsAsync() {
-  let token = null;
-
-  if (!Notifications || typeof Notifications.getPermissionsAsync !== 'function') {
-    return null;
-  }
-
-  // Request notification permissions (required on Android 13+ and iOS for both local and remote notifications)
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      console.log('[NOTIFICATION] Permissions not granted for notifications (status: ' + finalStatus + ')');
-    }
-  } catch (e) {
-    // Gracefully handle permission check error
-  }
-
-  // Create Android notification channel safely
-  if (Platform.OS === 'android') {
-    try {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#4A7C59',
-        enableVibrate: true,
-        showBadge: true,
-      });
-    } catch (e) {
-      // Safe fallback for Expo Go / emulator channel issues
-    }
-  }
-
-  // In Expo Go (SDK 53+), remote FCM token generation is disabled; native local notifications are used instead
-  if (Constants?.appOwnership === 'expo' || Constants?.executionEnvironment === 'storeClient') {
-    console.log('[PUSH] Running in Expo Go: using native local system notifications');
-    return null;
-  }
-
-  if (Device.isDevice) {
-    try {
-      const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ??
-        Constants?.easConfig?.projectId ??
-        '45c6f071-23ad-4887-8e0b-2c975198c3ae';
-
-      const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-      token = pushTokenData?.data || null;
-
-      if (token) {
-        console.log('[PUSH] Expo Push Token obtained:', token);
-      }
-    } catch (e) {
-      console.warn('[PUSH] Error getting push token:', e.message);
-    }
-  } else {
-    console.log('[PUSH] Running on simulator/emulator; physical device required for native remote push');
-  }
-
-  return token;
-}
 
 const NotificationContext = createContext(null);
 
@@ -226,25 +139,6 @@ export const NotificationProvider = ({ children }) => {
               appointmentId: newest.data?.appointment_id,
             });
 
-            // Trigger real native operating system notification (banner, vibration, lockscreen, notification tray)
-            if (Notifications && typeof Notifications.scheduleNotificationAsync === 'function') {
-              try {
-                Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: newest.title || 'VetBook Clinic Update',
-                    body: newest.message || 'You have an update regarding your pet.',
-                    sound: 'default',
-                    data: newest.data || {},
-                  },
-                  trigger: null,
-                }).catch((e) => {
-                  // Ignore background local scheduling errors
-                });
-              } catch (e) {
-                // Ignore background local scheduling errors
-              }
-            }
-
             // Gentle haptic feedback
             try {
               Vibration.vibrate(80);
@@ -285,55 +179,6 @@ export const NotificationProvider = ({ children }) => {
 
     return () => clearInterval(pollInterval);
   }, [isAuthenticated, fetchNotifications]);
-
-  /**
-   * Register push notifications on physical devices and attach push listeners
-   */
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    registerForPushNotificationsAsync().then((token) => {
-      if (token) {
-        updatePushToken(token)
-          .then(() => {
-            console.log('[PUSH] Token successfully registered with backend');
-          })
-          .catch((err) => {
-            console.warn('[PUSH] Failed to save push token on backend:', err?.message || err);
-          });
-      }
-    });
-
-    let receivedSub;
-    let responseSub;
-
-    if (Notifications && typeof Notifications.addNotificationReceivedListener === 'function') {
-      try {
-        receivedSub = Notifications.addNotificationReceivedListener((notification) => {
-          const { title, body, data } = notification?.request?.content || {};
-          showNotificationBanner({
-            title: title || 'Clinic Update',
-            message: body || 'You have an update regarding your pet.',
-            type: data?.type || 'appointment',
-            appointmentId: data?.appointment_id,
-          });
-        });
-
-        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-          try {
-            if (navigationRef.isReady()) {
-              navigationRef.navigate('MainTabs', { screen: 'Bookings' });
-            }
-          } catch (err) {}
-        });
-      } catch (e) {}
-    }
-
-    return () => {
-      if (receivedSub) receivedSub.remove();
-      if (responseSub) responseSub.remove();
-    };
-  }, [isAuthenticated, showNotificationBanner]);
 
   /**
    * Mark individual notification as read
@@ -409,4 +254,3 @@ export const useNotification = () => {
 };
 
 export default NotificationContext;
-
