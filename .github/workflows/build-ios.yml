@@ -42,8 +42,8 @@ jobs:
         env:
           EXPO_PUBLIC_API_URL: https://vetbook-backend.onrender.com/api
         run: |
-          WORKSPACE=$(find ios -name "*.xcworkspace" | head -n 1)
-          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          WORKSPACE="ios/VetBook.xcworkspace"
+          SCHEME="VetBook"
           echo "Building scheme $SCHEME from $WORKSPACE..."
           
           xcodebuild archive \
