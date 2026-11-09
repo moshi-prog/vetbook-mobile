@@ -398,29 +398,36 @@ const RegisterScreen = ({ navigation }) => {
               style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: agreedToTerms }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {agreedToTerms && (
                 <Ionicons name="checkmark" size={12} color={colors.white} />
               )}
             </TouchableOpacity>
 
-            {/* Terms text */}
-            <Text style={styles.termsText}>
-              I agree to the{' '}
-              <Text
-                style={styles.termsLink}
+            {/* Terms text container */}
+            <View style={styles.termsTextWrap}>
+              <Text style={styles.termsPrefixText}>I agree to the </Text>
+              <TouchableOpacity
                 onPress={() => setTermsModalVisible(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                accessibilityRole="button"
+                accessibilityLabel="View Terms of Service"
               >
-                Terms of Service
-              </Text>
-              {' '}and{' '}
-              <Text
-                style={styles.termsLink}
+                <Text style={styles.termsLink}>Terms of Service</Text>
+              </TouchableOpacity>
+              <Text style={styles.termsPrefixText}> and </Text>
+              <TouchableOpacity
                 onPress={() => setTermsModalVisible(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                accessibilityRole="button"
+                accessibilityLabel="View Privacy Policy"
               >
-                Privacy Policy
-              </Text>
-            </Text>
+                <Text style={styles.termsLink}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* ── CTA Button ────────────────────────────────────────────── */}
@@ -465,8 +472,10 @@ const RegisterScreen = ({ navigation }) => {
         visible={termsModalVisible}
         onClose={() => setTermsModalVisible(false)}
         onAccept={() => setAgreedToTerms(true)}
-        showAcceptButton={!agreedToTerms}
-        acceptText="I Agree to Terms"
+        title="Terms & Conditions"
+        subtitle="Clinic policies & terms of service"
+        showAcceptButton={true}
+        acceptText="I Understand & Agree"
       />
     </SafeAreaView>
   );
@@ -631,30 +640,40 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   checkbox: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     borderRadius: radii.sm,               // 8 px
     borderWidth: 1.5,
     borderColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 2,                         // optical alignment with first line of text
+    marginTop: 1,                         // optical alignment with first line of text
     backgroundColor: 'transparent',
+    flexShrink: 0,
   },
   checkboxChecked: {
     backgroundColor: colors.primary,     // #4A7C59
     borderColor: colors.primary,
   },
-  termsText: {
+  termsTextWrap: {
     flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  termsPrefixText: {
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.sm,              // 11 px
     color: colors.textSecondary,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   termsLink: {
     fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
     color: colors.primary,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+    lineHeight: 20,
   },
 
   // ── CTA Button ───────────────────────────────────────────────────────────

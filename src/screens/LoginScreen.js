@@ -411,15 +411,16 @@ const LoginScreen = ({ navigation }) => {
 
           {/* ── Terms & Agreement link ───────────────────────────────── */}
           <View style={styles.termsRow}>
-            <Text style={styles.termsText}>
-              By signing in, you agree to our{' '}
-              <Text
-                style={styles.termsLink}
-                onPress={() => setTermsModalVisible(true)}
-              >
-                Terms & Agreement
-              </Text>
-            </Text>
+            <Text style={styles.termsPrefixText}>By signing in, you agree to our </Text>
+            <TouchableOpacity
+              onPress={() => setTermsModalVisible(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="View Terms and Agreement"
+            >
+              <Text style={styles.termsLink}>Terms & Agreement</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
 
@@ -627,8 +628,10 @@ const LoginScreen = ({ navigation }) => {
       <TermsModal
         visible={termsModalVisible}
         onClose={() => setTermsModalVisible(false)}
-        title="Terms & Agreement"
-        subtitle="BK Petaholic Clinic terms & service policies"
+        title="Terms & Conditions"
+        subtitle="Clinic policies & terms of service"
+        showAcceptButton={true}
+        acceptText="I Understand & Agree"
       />
     </SafeAreaView>
   );
@@ -1025,22 +1028,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   termsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: spacing.md,
     marginBottom: spacing.xl,
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
   },
-  termsText: {
+  termsPrefixText: {
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.xs,
     color: colors.textSecondary,
-    textAlign: 'center',
     lineHeight: 18,
   },
   termsLink: {
     fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
     color: colors.primary,
+    fontWeight: '700',
     textDecorationLine: 'underline',
+    lineHeight: 18,
   },
 });
 
