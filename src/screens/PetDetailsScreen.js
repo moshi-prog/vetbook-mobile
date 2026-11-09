@@ -341,8 +341,6 @@ const PetDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleSeeAll = () => Alert.alert('Medical Records', 'Full history coming soon!');
-
   const handleRecordPress = (rec) => {
     setSelectedConsultation(rec);
     setConsultationModalVisible(true);
@@ -527,12 +525,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   const renderMedicalRecords = () => (
     <>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Recent Consultations</Text>
-        <TouchableOpacity onPress={handleSeeAll} accessibilityLabel="See all consultations">
-          <Text style={styles.seeAll}>See All</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.sectionTitle}>Recent Consultations</Text>
 
       {records.length === 0 ? (
         <View style={styles.emptyCard}>
