@@ -246,7 +246,7 @@ const LoginScreen = ({ navigation }) => {
           {/* Help icon */}
           <TouchableOpacity
             style={styles.appBarIconBtn}
-            onPress={() => Alert.alert('Help', 'Contact support at support@vetbook.app')}
+            onPress={() => Alert.alert('Help', 'Contact support at vetbookbkpetaholic@gmail.com')}
             accessibilityLabel="Help"
           >
             <Ionicons name="help-circle-outline" size={22} color={colors.textSecondary} />
