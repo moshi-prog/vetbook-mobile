@@ -32,7 +32,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -71,6 +71,7 @@ const normalizeGender = (value) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const AddPetScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
   const { petId, pet: editPet } = route?.params || {};
@@ -275,11 +276,11 @@ const AddPetScreen = ({ navigation, route }) => {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
 
         {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
@@ -321,9 +322,15 @@ const AddPetScreen = ({ navigation, route }) => {
         {/* ── Scrollable form body ─────────────────────────────────────── */}
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 140 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={true}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          bounces={true}
+          alwaysBounceVertical={true}
         >
 
           {/* ── 2. Photo Upload ───────────────────────────────────────── */}
@@ -764,10 +771,12 @@ const styles = StyleSheet.create({
   // ── Scroll ──────────────────────────────────────────────────────────────
   scroll: {
     flex: 1,
+    width: '100%',
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: spacing.base,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.base,
     gap: spacing.base,
   },
 
