@@ -36,6 +36,8 @@ import {
   RefreshControl,
   Modal,
   Linking,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -156,6 +158,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
   // Kept for upcoming owner-specific features (e.g., sharing)
   useAuth();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [pet, setPet]                       = useState(initialPet || null);
@@ -630,7 +633,13 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        Platform.OS === 'web' && { height: windowHeight },
+      ]}
+      edges={['top']}
+    >
 
       {/* ── 1. Top App Bar ─────────────────────────────────────────────── */}
       <View style={styles.appBar}>
@@ -674,8 +683,15 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 + insets.bottom }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 100 + insets.bottom },
+        ]}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
+        bounces={true}
+        alwaysBounceVertical={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1123,6 +1139,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    ...(Platform.OS === 'web' ? { overflow: 'hidden' } : null),
   },
   centered: {
     flex: 1,
@@ -1175,6 +1192,7 @@ const styles = StyleSheet.create({
   // ── Scroll ───────────────────────────────────────────────────────────────
   scroll: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
     paddingHorizontal: spacing.base,
