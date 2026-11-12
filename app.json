@@ -24,7 +24,13 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "VetBook",
+      "shortName": "VetBook",
+      "themeColor": "#4A7C59",
+      "backgroundColor": "#FAF6F0",
+      "display": "standalone",
+      "orientation": "portrait"
     },
     "plugins": [
       "expo-font",

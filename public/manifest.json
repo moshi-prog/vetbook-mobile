@@ -1,0 +1,24 @@
+{
+  "short_name": "VetBook",
+  "name": "VetBook - BK Petaholic Animal Clinic",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FAF6F0",
+  "theme_color": "#4A7C59",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/"
+}

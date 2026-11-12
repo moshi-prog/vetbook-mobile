@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover, user-scalable=no" />
+    <title>VetBook - Pet Care Clinic</title>
+
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="VetBook" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Android / General PWA Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#4A7C59" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- The `react-native-web` recommended style reset -->
+    <style id="expo-reset">
+      /* Mobile App Feel & Full Height Reset */
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-overflow-scrolling: touch;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        background-color: #FAF6F0;
+      }
+      /* Prevent text selection across app UI */
+      * {
+        -webkit-touch-callout: none;
+      }
+      input, textarea {
+        -webkit-user-select: auto;
+        user-select: auto;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <div id="root"></div>
+  </body>
+</html>
