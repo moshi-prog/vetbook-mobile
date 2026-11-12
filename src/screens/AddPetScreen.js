@@ -30,6 +30,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,6 +72,7 @@ const normalizeGender = (value) => {
 
 const AddPetScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
   const { petId, pet: editPet } = route?.params || {};
@@ -275,7 +277,13 @@ const AddPetScreen = ({ navigation, route }) => {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        Platform.OS === 'web' && { height: windowHeight },
+      ]}
+      edges={['top']}
+    >
       {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
       <View style={styles.topBar}>
         {/* Cancel */}
@@ -317,7 +325,7 @@ const AddPetScreen = ({ navigation, route }) => {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 160 + insets.bottom },
+          { paddingBottom: 120 + insets.bottom },
         ]}
         scrollEnabled={true}
         nestedScrollEnabled={true}
@@ -634,25 +642,6 @@ const AddPetScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* ── 6. Bottom CTA ─────────────────────────────────────────── */}
-          <TouchableOpacity
-            style={[styles.savePetBtn, loading && styles.savePetBtnDisabled]}
-            activeOpacity={0.88}
-            onPress={handleSave}
-            disabled={loading}
-            accessibilityLabel="Save pet profile"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <>
-                <Ionicons name="paw-outline" size={18} color={colors.white} />
-                <Text style={styles.savePetBtnText}>{isEditMode ? 'Save Changes' : 'Save Pet'}</Text>
-                <Ionicons name="arrow-forward" size={16} color={colors.white} />
-              </>
-            )}
-          </TouchableOpacity>
-
           {/* Delete Pet CTA (edit mode) */}
           {isEditMode && (
             <TouchableOpacity
@@ -670,6 +659,27 @@ const AddPetScreen = ({ navigation, route }) => {
           {/* Bottom spacer */}
           <View style={{ height: spacing.xxxl }} />
         </ScrollView>
+
+      {/* ── Sticky Bottom Bar ────────────────────────────────────────── */}
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <TouchableOpacity
+          style={[styles.savePetBtn, loading && styles.savePetBtnDisabled]}
+          activeOpacity={0.88}
+          onPress={handleSave}
+          disabled={loading}
+          accessibilityLabel="Save pet profile"
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <>
+              <Ionicons name="paw-outline" size={18} color={colors.white} />
+              <Text style={styles.savePetBtnText}>{isEditMode ? 'Save Changes' : 'Save Pet'}</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.white} />
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* ── Confirmation Dialog ────────────────────────────────────────── */}
       <ThemedDialog
@@ -704,6 +714,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    ...(Platform.OS === 'web' ? { overflow: 'hidden' } : null),
   },
 
   // ── Top Bar ─────────────────────────────────────────────────────────────
@@ -763,6 +774,7 @@ const styles = StyleSheet.create({
   // ── Scroll ──────────────────────────────────────────────────────────────
   scroll: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
     paddingHorizontal: spacing.base,
@@ -1086,7 +1098,23 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
-  // ── Bottom Save Button ────────────────────────────────────────────────────
+  // ── Sticky Bottom Bar ────────────────────────────────────────────────────
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 8,
+  },
   savePetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1095,7 +1123,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: radii.lg,
     paddingVertical: spacing.base,
-    marginTop: spacing.sm,
     shadowColor: colors.primaryDeep,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
