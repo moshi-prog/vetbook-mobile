@@ -119,6 +119,7 @@ export const markNotificationRead = (id) => api.put(`/notifications/${id}/read`)
 export const markAllNotificationsRead = () => api.put('/notifications/read-all');
 export const updatePushToken = (push_token) => api.post('/user/push-token', { push_token });
 export const sendTestPushNotification = () => api.post('/user/test-push');
+export const getVapidPublicKey = () => api.get('/push/vapid-key');
 
 // ============= CHATBOT ENDPOINT (for later) =============
 
@@ -155,5 +156,6 @@ api.sendChatMessage = sendChatMessage;
 api.getBranches = getBranches;
 api.getClinicInfo = getClinicInfo;
 api.sendTestPushNotification = sendTestPushNotification;
+api.getVapidPublicKey = getVapidPublicKey;
 
 export default api;

@@ -420,8 +420,8 @@ const ProfileScreen = () => {
     if (testingPush) return;
     setTestingPush(true);
     try {
-      // 1. Ensure push token is active and synced with the backend
-      await syncPushToken?.();
+      // 1. Ensure push token is active and synced with the backend (pass true for user gesture on web)
+      await syncPushToken?.(true);
 
       // 2. Dispatch test push from backend
       const res = await sendTestPushNotification();

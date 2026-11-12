@@ -21,7 +21,7 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { Vibration } from 'react-native';
+import { Vibration, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from './AuthContext';
 import {
@@ -29,8 +29,12 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   updatePushToken,
+  getVapidPublicKey,
 } from '../services/api';
-import { registerForPushNotificationsAsync } from '../services/notifications';
+import {
+  registerForPushNotificationsAsync,
+  requestWebPushPermissionAsync,
+} from '../services/notifications';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
 
@@ -184,14 +188,34 @@ export const NotificationProvider = ({ children }) => {
   }, [isAuthenticated, fetchNotifications]);
 
   /**
-   * Synchronize the device push token with the backend
+   * Synchronize the device push token or Web Push subscription with the backend.
+   * On Web (iOS Safari PWA / Chrome), pass userTriggered=true when invoked from a click/tap.
    */
-  const syncPushToken = useCallback(async () => {
+  const syncPushToken = useCallback(async (userTriggered = false) => {
     try {
-      const token = await registerForPushNotificationsAsync();
+      let token = null;
+
+      if (Platform.OS === 'web') {
+        let vapidKey = null;
+        try {
+          const res = await getVapidPublicKey();
+          vapidKey = res.data?.public_key;
+        } catch (e) {
+          console.warn('[Push] Could not fetch VAPID key:', e.message);
+        }
+
+        if (userTriggered) {
+          token = await requestWebPushPermissionAsync(vapidKey);
+        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          token = await requestWebPushPermissionAsync(vapidKey);
+        }
+      } else {
+        token = await registerForPushNotificationsAsync();
+      }
+
       if (token) {
         await updatePushToken(token);
-        console.log('[Push] Successfully registered push token with backend.');
+        console.log('[Push] Successfully registered push token/subscription with backend.');
         return token;
       }
     } catch (err) {
