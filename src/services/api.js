@@ -89,7 +89,7 @@ export const prepareAvatarRequest = async (imageUri, fieldName = 'avatar') => {
     throw new Error('No image URI provided');
   }
 
-  // 1. Already a Base64 data URL
+  // 1. Base64 data URL -> Send directly as clean JSON
   if (typeof imageUri === 'string' && imageUri.startsWith('data:image/')) {
     return {
       payload: { [fieldName]: imageUri },
@@ -97,7 +97,7 @@ export const prepareAvatarRequest = async (imageUri, fieldName = 'avatar') => {
     };
   }
 
-  // 2. Web browser environment
+  // 2. Web browser environment with blob/file URL -> convert to Base64 JSON
   if (Platform.OS === 'web' && typeof imageUri === 'string') {
     try {
       const response = await fetch(imageUri);
@@ -117,25 +117,12 @@ export const prepareAvatarRequest = async (imageUri, fieldName = 'avatar') => {
     }
   }
 
-  // 3. React Native Native (iOS / Android) or FormData fallback
+  // 3. File URI -> Send as native FormData (Axios attaches boundary automatically)
   const formData = new FormData();
-  if (Platform.OS === 'web') {
-    try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      formData.append(fieldName, blob, `${fieldName}.jpg`);
-    } catch {
-      formData.append(fieldName, imageUri);
-    }
-    return {
-      payload: formData,
-      headers: {},
-    };
-  }
-
   const ext = imageUri.split('.').pop() || 'jpg';
   const cleanExt = ext.includes('?') ? ext.split('?')[0] : ext;
   const mimeType = cleanExt.toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+
   formData.append(fieldName, {
     uri: imageUri,
     name: `${fieldName}.${cleanExt}`,
@@ -144,7 +131,7 @@ export const prepareAvatarRequest = async (imageUri, fieldName = 'avatar') => {
 
   return {
     payload: formData,
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {}, // Do NOT hardcode 'multipart/form-data'; let Axios attach boundary automatically
   };
 };
 

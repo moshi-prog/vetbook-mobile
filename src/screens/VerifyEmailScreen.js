@@ -26,6 +26,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 const CODE_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Screen horizontal padding: 24 on each side = 48. Total gaps between 6 boxes: 5 * 8 = 40.
+const DIGIT_BOX_WIDTH = Math.min(52, Math.max(42, Math.floor((SCREEN_WIDTH - 48 - 40) / 6)));
 
 const VerifyEmailScreen = ({ route, navigation }) => {
   const email = route.params?.email || '';
@@ -223,7 +228,7 @@ const VerifyEmailScreen = ({ route, navigation }) => {
                 onChangeText={(text) => handleDigitChange(text, idx)}
                 onKeyPress={(e) => handleKeyPress(e, idx)}
                 keyboardType="number-pad"
-                maxLength={CODE_LENGTH}
+                maxLength={1}
                 selectTextOnFocus
                 textAlign="center"
                 autoFocus={idx === 0}
@@ -381,22 +386,26 @@ const styles = StyleSheet.create({
   },
   digitsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 8,
   },
   digitBox: {
-    flex: 1,
+    width: DIGIT_BOX_WIDTH,
     height: 56,
     borderRadius: 14,
     backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: colors.divider,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: fonts.headingBold,
+    textAlign: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,

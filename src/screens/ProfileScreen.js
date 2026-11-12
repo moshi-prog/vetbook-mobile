@@ -263,10 +263,10 @@ const ProfileScreen = () => {
       }
 
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.5,
         base64: true,
       });
 
@@ -276,12 +276,18 @@ const ProfileScreen = () => {
 
       const asset = pickerResult.assets[0];
       const imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+
+      // Optimistic update: show picked photo immediately
+      if (auth.updateUserState) {
+        auth.updateUserState({ avatar_url: asset.uri });
+      }
+
       setUploadingAvatar(true);
 
       const res = await uploadUserAvatar(imageUri);
       const newAvatarUrl = res.data?.avatar_url || res.data?.user?.avatar_url;
 
-      if (auth.updateUserState) {
+      if (newAvatarUrl && auth.updateUserState) {
         auth.updateUserState({ avatar_url: newAvatarUrl });
       } else {
         auth.refreshUser?.();
@@ -289,6 +295,9 @@ const ProfileScreen = () => {
 
       showDialog('Success', 'Profile photo updated successfully!', 'success');
     } catch (err) {
+      console.error('Avatar upload error:', err);
+      // Revert optimistic update by refreshing from storage/server
+      auth.refreshUser?.();
       const msg = err.response?.data?.message || err.message || 'Failed to upload photo.';
       showDialog('Upload Failed', msg, 'error');
     } finally {
