@@ -3,14 +3,12 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * VetBook — 6-Digit Email Verification (OTP) Screen
  *
- * Requirements:
- *  • 6 individual digit input boxes with auto-focus to next box on keystroke
- *  • Backspace navigation retreats to previous box
- *  • Support pasting a full 6-digit OTP code into any box
- *  • "Verify & Activate Account" action button
- *  • "Resend Code" action with 60-second cooldown timer
- *  • "Wrong email? Back to Register" navigation
- *  • Transitions directly into authenticated stack on success
+ * Architecture:
+ *  • Single hidden TextInput with textContentType="oneTimeCode" for native paste
+ *    and iOS/Android AutoFill support.
+ *  • 6 fixed-width <View> cells that NEVER stretch, overflow, or distort.
+ *  • Auto-submit and keyboard dismissal when all 6 digits are entered or pasted.
+ *  • Compact responsive layout ensuring "Verify" button is always visible above keypad.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -20,13 +18,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
   ScrollView,
-  Dimensions,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,21 +36,18 @@ import { useAuth } from '../contexts/AuthContext';
 const CODE_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Screen horizontal padding: 24 on each side = 48. Total gaps between 6 boxes: 5 * 8 = 40.
-const DIGIT_BOX_WIDTH = Math.min(52, Math.max(42, Math.floor((SCREEN_WIDTH - 48 - 40) / 6)));
-
 const VerifyEmailScreen = ({ route, navigation }) => {
   const email = route.params?.email || '';
   const { verifyEmail, resendVerificationCode } = useAuth();
 
-  const [digits, setDigits] = useState(Array(CODE_LENGTH).fill(''));
+  const [code, setCode] = useState('');
+  const [isFocused, setIsFocused] = useState(true);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timer, setTimer] = useState(RESEND_COOLDOWN_SECONDS);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const inputRefs = useRef([]);
+  const inputRef = useRef(null);
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -66,55 +62,15 @@ const VerifyEmailScreen = ({ route, navigation }) => {
     };
   }, [timer]);
 
-  // Focus the first input on mount
+  // Focus hidden input on mount
   useEffect(() => {
     const focusTimeout = setTimeout(() => {
-      if (inputRefs.current[0]) {
-        inputRefs.current[0].focus();
-      }
-    }, 300);
+      inputRef.current?.focus();
+    }, 250);
     return () => clearTimeout(focusTimeout);
   }, []);
 
-  const handleDigitChange = (text, index) => {
-    setErrorMessage(null);
-
-    // Handle full code paste (e.g. from SMS/email paste suggestions)
-    const cleaned = text.replace(/\D/g, '');
-    if (cleaned.length >= CODE_LENGTH) {
-      const newDigits = cleaned.slice(0, CODE_LENGTH).split('');
-      setDigits(newDigits);
-      if (inputRefs.current[CODE_LENGTH - 1]) {
-        inputRefs.current[CODE_LENGTH - 1].focus();
-      }
-      return;
-    }
-
-    const singleDigit = cleaned.slice(-1);
-    const newDigits = [...digits];
-    newDigits[index] = singleDigit;
-    setDigits(newDigits);
-
-    // Advance to next box if digit was typed
-    if (singleDigit && index < CODE_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace') {
-      if (!digits[index] && index > 0) {
-        // Move back to previous box and clear it
-        const newDigits = [...digits];
-        newDigits[index - 1] = '';
-        setDigits(newDigits);
-        inputRefs.current[index - 1]?.focus();
-      }
-    }
-  };
-
-  const handleVerify = async () => {
-    const fullCode = digits.join('');
+  const executeVerify = async (fullCode) => {
     if (fullCode.length !== CODE_LENGTH) {
       setErrorMessage('Please enter all 6 digits of your verification code.');
       return;
@@ -122,12 +78,13 @@ const VerifyEmailScreen = ({ route, navigation }) => {
 
     setLoading(true);
     setErrorMessage(null);
+    Keyboard.dismiss();
 
     try {
       const result = await verifyEmail(email, fullCode);
 
       if (result.success) {
-        // Success: AuthContext automatically transitions into authenticated home stack
+        // Success: AuthContext transitions directly into authenticated home stack
         return;
       } else {
         const msg = result.error || 'Invalid or expired verification code.';
@@ -140,6 +97,18 @@ const VerifyEmailScreen = ({ route, navigation }) => {
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCodeChange = (text) => {
+    // Only allow numeric digits up to 6 characters
+    const cleaned = text.replace(/\D/g, '').slice(0, CODE_LENGTH);
+    setCode(cleaned);
+    setErrorMessage(null);
+
+    // Auto-verify as soon as 6 digits are typed or pasted
+    if (cleaned.length === CODE_LENGTH) {
+      executeVerify(cleaned);
     }
   };
 
@@ -175,123 +144,151 @@ const VerifyEmailScreen = ({ route, navigation }) => {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Top Bar with Back Arrow */}
-          <View style={styles.topBar}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Top Bar with Back Arrow */}
+            <View style={styles.topBar}>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                style={styles.backButton}
+                activeOpacity={0.7}
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Compact Hero Icon */}
+            <View style={styles.iconContainer}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="mail-unread" size={28} color={colors.primary} />
+              </View>
+            </View>
+
+            {/* Header Title & Subtitle */}
+            <Text style={styles.title}>Verify Your Email</Text>
+            <Text style={styles.subtitle}>
+              We've sent a 6-digit verification code to
+            </Text>
+            <View style={styles.emailPill}>
+              <Ionicons name="mail" size={13} color={colors.primaryDeep} style={{ marginRight: 6 }} />
+              <Text style={styles.emailText} numberOfLines={1}>
+                {email || 'your email address'}
+              </Text>
+            </View>
+
+            <Text style={styles.hint}>
+              Please check your inbox or spam folder and enter the code below to activate your account.
+            </Text>
+
+            {/* ── Visual 6-Digit OTP Cells Container ── */}
+            <View style={styles.otpWrapper}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => inputRef.current?.focus()}
+                style={styles.cellsRow}
+              >
+                {Array.from({ length: CODE_LENGTH }).map((_, idx) => {
+                  const digit = code[idx] || '';
+                  const isCurrent = code.length === idx;
+                  const isFilled = !!digit;
+
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.cellBox,
+                        isFilled && styles.cellBoxFilled,
+                        isCurrent && isFocused && styles.cellBoxActive,
+                        errorMessage && styles.cellBoxError,
+                      ]}
+                    >
+                      <Text style={styles.cellDigit}>{digit}</Text>
+                      {isCurrent && isFocused && <View style={styles.blinkingCursor} />}
+                    </View>
+                  );
+                })}
+              </TouchableOpacity>
+
+              {/* Single Invisible TextInput Covering the OTP Area */}
+              <TextInput
+                ref={inputRef}
+                value={code}
+                onChangeText={handleCodeChange}
+                maxLength={CODE_LENGTH}
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                autoComplete="one-time-code"
+                autoFocus={true}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                style={styles.hiddenInput}
+                caretHidden={true}
+                selectTextOnFocus={false}
+              />
+            </View>
+
+            {/* Error Message */}
+            {errorMessage && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={15} color={colors.alertRed} style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            )}
+
+            {/* Verify & Activate Account Action Button */}
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
+              style={[styles.verifyButton, loading && styles.buttonDisabled]}
+              onPress={() => executeVerify(code)}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.verifyButtonText}>Verify &amp; Activate Account</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Resend Code Section */}
+            <View style={styles.resendSection}>
+              <Text style={styles.resendPrompt}>Didn't receive the code?</Text>
+              {timer > 0 ? (
+                <View style={styles.timerBadge}>
+                  <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                  <Text style={styles.timerText}>Resend code in {timer}s</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={handleResend}
+                  disabled={resending}
+                  activeOpacity={0.7}
+                >
+                  {resending ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.resendActionText}>Resend Code</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Footer Navigation */}
+            <TouchableOpacity
+              style={styles.footerLink}
+              onPress={() => navigation.navigate('Register')}
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+              <Text style={styles.footerLinkText}>
+                Wrong email address? <Text style={styles.footerLinkBold}>Back to Register</Text>
+              </Text>
             </TouchableOpacity>
-          </View>
-
-          {/* Hero Icon */}
-          <View style={styles.iconContainer}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="mail-unread" size={38} color={colors.primary} />
-            </View>
-          </View>
-
-          {/* Header Title & Subtitle */}
-          <Text style={styles.title}>Verify Your Email</Text>
-          <Text style={styles.subtitle}>
-            We've sent a 6-digit verification code to
-          </Text>
-          <View style={styles.emailPill}>
-            <Ionicons name="mail" size={14} color={colors.primaryDeep} style={{ marginRight: 6 }} />
-            <Text style={styles.emailText} numberOfLines={1}>
-              {email || 'your email address'}
-            </Text>
-          </View>
-
-          <Text style={styles.hint}>
-            Please check your inbox or spam folder and enter the code below to activate your account.
-          </Text>
-
-          {/* 6 Digit Input Boxes */}
-          <View style={styles.digitsRow}>
-            {digits.map((digit, idx) => (
-              <TextInput
-                key={idx}
-                ref={(ref) => (inputRefs.current[idx] = ref)}
-                style={[
-                  styles.digitBox,
-                  digit ? styles.digitBoxFilled : null,
-                  errorMessage ? styles.digitBoxError : null,
-                ]}
-                value={digit}
-                onChangeText={(text) => handleDigitChange(text, idx)}
-                onKeyPress={(e) => handleKeyPress(e, idx)}
-                keyboardType="number-pad"
-                maxLength={1}
-                selectTextOnFocus
-                textAlign="center"
-                autoFocus={idx === 0}
-              />
-            ))}
-          </View>
-
-          {/* Error Message */}
-          {errorMessage && (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={16} color={colors.alertRed} style={{ marginRight: 6 }} />
-              <Text style={styles.errorText}>{errorMessage}</Text>
-            </View>
-          )}
-
-          {/* Verify Action Button */}
-          <TouchableOpacity
-            style={[styles.verifyButton, loading && styles.buttonDisabled]}
-            onPress={handleVerify}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.verifyButtonText}>Verify &amp; Activate Account</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Resend Code Section */}
-          <View style={styles.resendSection}>
-            <Text style={styles.resendPrompt}>Didn't receive the code?</Text>
-            {timer > 0 ? (
-              <View style={styles.timerBadge}>
-                <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{ marginRight: 4 }} />
-                <Text style={styles.timerText}>Resend code in {timer}s</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={handleResend}
-                disabled={resending}
-                activeOpacity={0.7}
-              >
-                {resending ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={styles.resendActionText}>Resend Code</Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Footer Navigation */}
-          <TouchableOpacity
-            style={styles.footerLink}
-            onPress={() => navigation.navigate('Register')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.footerLinkText}>
-              Wrong email address? <Text style={styles.footerLinkBold}>Back to Register</Text>
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+          </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -307,20 +304,20 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 36,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
     alignItems: 'center',
   },
   topBar: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
@@ -328,14 +325,14 @@ const styles = StyleSheet.create({
     borderColor: colors.divider,
   },
   iconContainer: {
-    marginTop: 20,
-    marginBottom: 18,
+    marginTop: 8,
+    marginBottom: 10,
     alignItems: 'center',
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -344,15 +341,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fonts.heading,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     fontFamily: fonts.bodyRegular,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
   },
@@ -360,90 +357,116 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 9999,
     borderWidth: 1,
     borderColor: colors.divider,
-    marginTop: 8,
-    marginBottom: 12,
-    maxWidth: '90%',
+    marginTop: 6,
+    marginBottom: 8,
+    maxWidth: '92%',
   },
   emailText: {
     fontFamily: fonts.bodyMedium,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primaryDeep,
   },
   hint: {
     fontFamily: fonts.bodyRegular,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 28,
-    paddingHorizontal: 8,
+    lineHeight: 17,
+    marginBottom: 16,
+    paddingHorizontal: 10,
   },
-  digitsRow: {
+
+  // ── OTP Cells & Hidden Input ──
+  otpWrapper: {
+    position: 'relative',
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cellsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 20,
     gap: 8,
+    width: '100%',
   },
-  digitBox: {
-    width: DIGIT_BOX_WIDTH,
-    height: 56,
-    borderRadius: 14,
+  cellBox: {
+    width: 46,
+    height: 54,
+    borderRadius: 13,
     backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: colors.divider,
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.headingBold,
-    textAlign: 'center',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 1,
   },
-  digitBoxFilled: {
+  cellBoxActive: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+    backgroundColor: '#FAFDF9',
+  },
+  cellBoxFilled: {
     borderColor: colors.primary,
     backgroundColor: '#FAFAF8',
   },
-  digitBoxError: {
+  cellBoxError: {
     borderColor: colors.alertRed,
   },
+  cellDigit: {
+    fontFamily: fonts.headingBold,
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  blinkingCursor: {
+    position: 'absolute',
+    width: 2,
+    height: 20,
+    backgroundColor: colors.primary,
+    borderRadius: 1,
+  },
+  hiddenInput: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.01,
+    color: 'transparent',
+  },
+
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     paddingHorizontal: 8,
   },
   errorText: {
     fontFamily: fonts.bodyRegular,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.alertRed,
     fontWeight: '600',
   },
   verifyButton: {
     width: '100%',
-    height: 52,
+    height: 50,
     backgroundColor: colors.primary,
-    borderRadius: 26,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    marginTop: 4,
+    marginBottom: 18,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
     elevation: 3,
   },
   buttonDisabled: {
@@ -457,19 +480,19 @@ const styles = StyleSheet.create({
   },
   resendSection: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 20,
   },
   resendPrompt: {
     fontFamily: fonts.bodyRegular,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.cardWarm,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9999,
   },
@@ -481,17 +504,17 @@ const styles = StyleSheet.create({
   },
   resendActionText: {
     fontFamily: fonts.bodyMedium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.primary,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
   footerLink: {
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   footerLinkText: {
     fontFamily: fonts.bodyRegular,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   footerLinkBold: {
@@ -501,4 +524,3 @@ const styles = StyleSheet.create({
 });
 
 export default VerifyEmailScreen;
-
