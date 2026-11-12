@@ -184,23 +184,30 @@ export const NotificationProvider = ({ children }) => {
   }, [isAuthenticated, fetchNotifications]);
 
   /**
+   * Synchronize the device push token with the backend
+   */
+  const syncPushToken = useCallback(async () => {
+    try {
+      const token = await registerForPushNotificationsAsync();
+      if (token) {
+        await updatePushToken(token);
+        console.log('[Push] Successfully registered push token with backend.');
+        return token;
+      }
+    } catch (err) {
+      console.warn('[Push] Failed to sync push token with backend:', err?.message);
+    }
+    return null;
+  }, []);
+
+  /**
    * Remote Push Notifications (Lock Screen, Background & Heads-Up alerts)
    */
   useEffect(() => {
     if (!isAuthenticated) return;
 
     // 1. Register push token with backend on login
-    (async () => {
-      try {
-        const token = await registerForPushNotificationsAsync();
-        if (token) {
-          await updatePushToken(token);
-          console.log('[Push] Successfully registered push token with backend.');
-        }
-      } catch (err) {
-        console.warn('[Push] Failed to sync push token with backend:', err.message);
-      }
-    })();
+    syncPushToken();
 
     // 2. Handle notification clicks from Lock Screen / Background
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -208,7 +215,11 @@ export const NotificationProvider = ({ children }) => {
       console.log('[Push] Notification tapped from lockscreen/background:', data);
       try {
         if (navigationRef.isReady()) {
-          navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+          if (data?.type === 'medical_record') {
+            navigationRef.navigate('MainTabs', { screen: 'Pets' });
+          } else {
+            navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+          }
         }
       } catch (e) {
         console.warn('Navigation error on notification tap:', e);
@@ -223,7 +234,11 @@ export const NotificationProvider = ({ children }) => {
           console.log('[Push] App opened from killed state via notification:', data);
           try {
             if (navigationRef.isReady()) {
-              navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+              if (data?.type === 'medical_record') {
+                navigationRef.navigate('MainTabs', { screen: 'Pets' });
+              } else {
+                navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+              }
             }
           } catch (e) {
             console.warn('Navigation error on initial notification response:', e);
@@ -235,7 +250,7 @@ export const NotificationProvider = ({ children }) => {
     return () => {
       responseListener.remove();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, syncPushToken]);
 
   /**
    * Mark individual notification as read
@@ -284,6 +299,7 @@ export const NotificationProvider = ({ children }) => {
         fetchNotifications,
         markAsRead,
         markAllAsRead,
+        syncPushToken,
       }}
     >
       {children}

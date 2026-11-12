@@ -36,7 +36,8 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import api, { uploadUserAvatar } from '../services/api';
+import { useNotification } from '../contexts/NotificationContext';
+import api, { uploadUserAvatar, sendTestPushNotification } from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -140,8 +141,10 @@ const Row = ({ icon, label, onPress, right, last, disabled }) => (
 const ProfileScreen = () => {
   const auth = useAuth();
   const { user } = auth;
+  const { syncPushToken } = useNotification();
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
 
   // Modal visibilities
   const [editProfileVisible, setEditProfileVisible] = useState(false);
@@ -413,6 +416,31 @@ const ProfileScreen = () => {
     }
   };
 
+  const handleTestPushNotification = async () => {
+    if (testingPush) return;
+    setTestingPush(true);
+    try {
+      // 1. Ensure push token is active and synced with the backend
+      await syncPushToken?.();
+
+      // 2. Dispatch test push from backend
+      const res = await sendTestPushNotification();
+      showDialog(
+        'Push Dispatched 🐾',
+        res.data?.message || 'A test push notification has been sent! Lock your screen or background the app to see it appear.',
+        'success'
+      );
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to dispatch test notification. Please make sure notifications are enabled in your device settings.';
+      showDialog('Push Notification', msg, 'error');
+    } finally {
+      setTestingPush(false);
+    }
+  };
+
   const handleLogout = () => {
     showConfirm({
       title: 'Log out',
@@ -487,7 +515,24 @@ const ProfileScreen = () => {
           <Row icon="lock-closed-outline" label="Change Password" onPress={handleOpenChangePassword} last />
         </View>
 
-        {/* ── 4. Support & Legal ─────────────────────────────────────────── */}
+        {/* ── 4. Notifications & Diagnostics ─────────────────────────────── */}
+        <SectionHeader title="Notifications" />
+        <View style={styles.sectionCard}>
+          <Row
+            icon="notifications-outline"
+            label="Test Push Notification"
+            onPress={handleTestPushNotification}
+            disabled={testingPush}
+            right={
+              testingPush ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : undefined
+            }
+            last
+          />
+        </View>
+
+        {/* ── 5. Support & Legal ─────────────────────────────────────────── */}
         <SectionHeader title="Support & Legal" />
         <View style={styles.sectionCard}>
           <Row icon="call-outline" label="Contact Clinic" onPress={handleContactClinic} />
