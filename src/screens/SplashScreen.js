@@ -125,19 +125,11 @@ const SplashScreen = ({ navigation }) => {
               onError={() => setLogoLoadError(true)}
             />
           ) : (
-            <>
-              {/* Leaf — rendered as a rotated Ionicons leaf icon */}
-              <Ionicons
-                name="leaf"
-                size={32}
-                color={colors.primary}
-                style={styles.leafIcon}
-              />
-              {/* Paw — overlaid in the lower-right corner of the badge */}
-              <View style={styles.pawOverlay}>
-                <Ionicons name="paw" size={20} color={colors.primaryLight} />
-              </View>
-            </>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.splashLogoImage}
+              resizeMode="cover"
+            />
           )}
         </View>
 

@@ -357,9 +357,11 @@ const HomeScreen = ({ navigation }) => {
               onError={() => setLogoLoadError(true)}
             />
           ) : (
-            <View style={styles.pawBadge}>
-              <Ionicons name="paw-outline" size={16} color={colors.white} />
-            </View>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.appBarLogo}
+              resizeMode="cover"
+            />
           )}
           <Text style={styles.wordmark}>VetBook</Text>
         </View>
@@ -654,9 +656,11 @@ const HomeScreen = ({ navigation }) => {
                     onError={() => setLogoLoadError(true)}
                   />
                 ) : (
-                  <View style={styles.clinicPawBadge}>
-                    <Ionicons name="paw" size={16} color={colors.primary} />
-                  </View>
+                  <Image
+                    source={require('../../assets/icon.png')}
+                    style={styles.clinicLogoImage}
+                    resizeMode="cover"
+                  />
                 )}
                 <View style={styles.clinicHeaderTextWrap}>
                   <Text style={styles.clinicName}>{clinic.name || 'BK Petaholic Animal Clinic'}</Text>

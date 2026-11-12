@@ -275,10 +275,11 @@ const LoginScreen = ({ navigation }) => {
                 onError={() => setLogoLoadError(true)}
               />
             ) : (
-              <View style={styles.logoIconWrapper}>
-                <Ionicons name="leaf" size={14} color={colors.primary} style={styles.logoLeaf} />
-                <Ionicons name="paw" size={10} color={colors.primaryLight} style={styles.logoPaw} />
-              </View>
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logoImage}
+                resizeMode="cover"
+              />
             )}
             <Text style={styles.appBarLogo}>VetBook</Text>
           </View>

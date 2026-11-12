@@ -909,9 +909,11 @@ const ProfileScreen = () => {
                     onError={() => setLogoLoadError(true)}
                   />
                 ) : (
-                  <View style={styles.aboutPawCircle}>
-                    <Ionicons name="paw" size={24} color={colors.primary} />
-                  </View>
+                  <Image
+                    source={require('../../assets/icon.png')}
+                    style={styles.aboutClinicLogo}
+                    resizeMode="cover"
+                  />
                 )}
                 <Text style={styles.aboutClinicName}>{clinic.name || 'BK Petaholic Animal Clinic'}</Text>
                 <Text style={styles.aboutClinicTagline}>{clinic.tagline || 'Compassionate Care for Batangas Pets'}</Text>

@@ -328,7 +328,13 @@ const RegisterScreen = ({ navigation }) => {
                 resizeMode="cover"
                 onError={() => setLogoLoadError(true)}
               />
-            ) : null}
+            ) : (
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logoImage}
+                resizeMode="cover"
+              />
+            )}
             <Text style={styles.appBarLogo}>VetBook</Text>
           </View>
 
