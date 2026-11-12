@@ -3,12 +3,11 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * VetBook — 6-Digit Email Verification (OTP) Screen
  *
- * Architecture:
- *  • Single hidden TextInput with textContentType="oneTimeCode" for native paste
- *    and iOS/Android AutoFill support.
- *  • 6 fixed-width <View> cells that NEVER stretch, overflow, or distort.
- *  • Auto-submit and keyboard dismissal when all 6 digits are entered or pasted.
- *  • Compact responsive layout ensuring "Verify" button is always visible above keypad.
+ * Requirements:
+ *  • Tapping anywhere on the 6 digit cards immediately activates the keyboard.
+ *  • Direct native touch on the single TextInput with pointerEvents="none" on visual cells.
+ *  • Auto-submit and keyboard dismissal upon entering the 6th digit.
+ *  • Works seamlessly across iOS, Android, and Web.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -18,7 +17,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -41,7 +39,7 @@ const VerifyEmailScreen = ({ route, navigation }) => {
   const { verifyEmail, resendVerificationCode } = useAuth();
 
   const [code, setCode] = useState('');
-  const [isFocused, setIsFocused] = useState(true);
+  const [isFocused, setIsFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timer, setTimer] = useState(RESEND_COOLDOWN_SECONDS);
@@ -62,11 +60,11 @@ const VerifyEmailScreen = ({ route, navigation }) => {
     };
   }, [timer]);
 
-  // Focus hidden input on mount
+  // Focus input on mount with slight delay for smooth navigation transition
   useEffect(() => {
     const focusTimeout = setTimeout(() => {
       inputRef.current?.focus();
-    }, 250);
+    }, 350);
     return () => clearTimeout(focusTimeout);
   }, []);
 
@@ -101,7 +99,6 @@ const VerifyEmailScreen = ({ route, navigation }) => {
   };
 
   const handleCodeChange = (text) => {
-    // Only allow numeric digits up to 6 characters
     const cleaned = text.replace(/\D/g, '').slice(0, CODE_LENGTH);
     setCode(cleaned);
     setErrorMessage(null);
@@ -138,157 +135,172 @@ const VerifyEmailScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleContainerPress = () => {
+    inputRef.current?.focus();
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Top Bar with Back Arrow */}
-            <View style={styles.topBar}>
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                style={styles.backButton}
-                activeOpacity={0.7}
-                accessibilityLabel="Go back"
-              >
-                <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Compact Hero Icon */}
-            <View style={styles.iconContainer}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="mail-unread" size={28} color={colors.primary} />
-              </View>
-            </View>
-
-            {/* Header Title & Subtitle */}
-            <Text style={styles.title}>Verify Your Email</Text>
-            <Text style={styles.subtitle}>
-              We've sent a 6-digit verification code to
-            </Text>
-            <View style={styles.emailPill}>
-              <Ionicons name="mail" size={13} color={colors.primaryDeep} style={{ marginRight: 6 }} />
-              <Text style={styles.emailText} numberOfLines={1}>
-                {email || 'your email address'}
-              </Text>
-            </View>
-
-            <Text style={styles.hint}>
-              Please check your inbox or spam folder and enter the code below to activate your account.
-            </Text>
-
-            {/* ── Visual 6-Digit OTP Cells Container ── */}
-            <View style={styles.otpWrapper}>
-              <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => inputRef.current?.focus()}
-                style={styles.cellsRow}
-              >
-                {Array.from({ length: CODE_LENGTH }).map((_, idx) => {
-                  const digit = code[idx] || '';
-                  const isCurrent = code.length === idx;
-                  const isFilled = !!digit;
-
-                  return (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.cellBox,
-                        isFilled && styles.cellBoxFilled,
-                        isCurrent && isFocused && styles.cellBoxActive,
-                        errorMessage && styles.cellBoxError,
-                      ]}
-                    >
-                      <Text style={styles.cellDigit}>{digit}</Text>
-                      {isCurrent && isFocused && <View style={styles.blinkingCursor} />}
-                    </View>
-                  );
-                })}
-              </TouchableOpacity>
-
-              {/* Single Invisible TextInput Covering the OTP Area */}
-              <TextInput
-                ref={inputRef}
-                value={code}
-                onChangeText={handleCodeChange}
-                maxLength={CODE_LENGTH}
-                keyboardType="number-pad"
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                autoFocus={true}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                style={styles.hiddenInput}
-                caretHidden={true}
-                selectTextOnFocus={false}
-              />
-            </View>
-
-            {/* Error Message */}
-            {errorMessage && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={15} color={colors.alertRed} style={{ marginRight: 6 }} />
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              </View>
-            )}
-
-            {/* Verify & Activate Account Action Button */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Top Bar with Back Arrow */}
+          <View style={styles.topBar}>
             <TouchableOpacity
-              style={[styles.verifyButton, loading && styles.buttonDisabled]}
-              onPress={() => executeVerify(code)}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.verifyButtonText}>Verify &amp; Activate Account</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Resend Code Section */}
-            <View style={styles.resendSection}>
-              <Text style={styles.resendPrompt}>Didn't receive the code?</Text>
-              {timer > 0 ? (
-                <View style={styles.timerBadge}>
-                  <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginRight: 4 }} />
-                  <Text style={styles.timerText}>Resend code in {timer}s</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={handleResend}
-                  disabled={resending}
-                  activeOpacity={0.7}
-                >
-                  {resending ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Text style={styles.resendActionText}>Resend Code</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Footer Navigation */}
-            <TouchableOpacity
-              style={styles.footerLink}
-              onPress={() => navigation.navigate('Register')}
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
               activeOpacity={0.7}
+              accessibilityLabel="Go back"
             >
-              <Text style={styles.footerLinkText}>
-                Wrong email address? <Text style={styles.footerLinkBold}>Back to Register</Text>
-              </Text>
+              <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
-          </ScrollView>
-        </TouchableWithoutFeedback>
+          </View>
+
+          {/* Compact Hero Icon */}
+          <View style={styles.iconContainer}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="mail-unread" size={28} color={colors.primary} />
+            </View>
+          </View>
+
+          {/* Header Title & Subtitle */}
+          <Text style={styles.title}>Verify Your Email</Text>
+          <Text style={styles.subtitle}>
+            We've sent a 6-digit verification code to
+          </Text>
+          <View style={styles.emailPill}>
+            <Ionicons name="mail" size={13} color={colors.primaryDeep} style={{ marginRight: 6 }} />
+            <Text style={styles.emailText} numberOfLines={1}>
+              {email || 'your email address'}
+            </Text>
+          </View>
+
+          <Text style={styles.hint}>
+            Please check your inbox or spam folder and enter the code below to activate your account.
+          </Text>
+
+          {/* ── Visual 6-Digit OTP Cells Container ── */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={handleContainerPress}
+            style={styles.otpWrapper}
+          >
+            {/* Visual boxes rendered underneath (pointerEvents="none" passes touches directly to the input) */}
+            <View style={styles.cellsRow} pointerEvents="none">
+              {Array.from({ length: CODE_LENGTH }).map((_, idx) => {
+                const digit = code[idx] || '';
+                const isCurrent = code.length === idx;
+                const isFilled = !!digit;
+
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.cellBox,
+                      isFilled && styles.cellBoxFilled,
+                      isCurrent && isFocused && styles.cellBoxActive,
+                      errorMessage && styles.cellBoxError,
+                    ]}
+                  >
+                    <Text style={styles.cellDigit}>{digit}</Text>
+                    {isCurrent && isFocused && <View style={styles.blinkingCursor} />}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Native TextInput sitting directly on top for 100% reliable tap response */}
+            <TextInput
+              ref={inputRef}
+              value={code}
+              onChangeText={handleCodeChange}
+              maxLength={CODE_LENGTH}
+              keyboardType="number-pad"
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+              autoFocus={true}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              style={styles.hiddenInput}
+              caretHidden={true}
+            />
+          </TouchableOpacity>
+
+          {/* Fallback Tap Helper */}
+          <TouchableOpacity
+            onPress={handleContainerPress}
+            activeOpacity={0.7}
+            style={styles.tapPromptRow}
+          >
+            <Ionicons name="keypad-outline" size={14} color={isFocused ? colors.primary : colors.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={[styles.tapPromptText, isFocused && { color: colors.primary }]}>
+              {isFocused ? 'Keypad active — type or paste code' : 'Tap here to enter code'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Error Message */}
+          {errorMessage && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={15} color={colors.alertRed} style={{ marginRight: 6 }} />
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            </View>
+          )}
+
+          {/* Verify & Activate Account Action Button */}
+          <TouchableOpacity
+            style={[styles.verifyButton, loading && styles.buttonDisabled]}
+            onPress={() => executeVerify(code)}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <Text style={styles.verifyButtonText}>Verify &amp; Activate Account</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Resend Code Section */}
+          <View style={styles.resendSection}>
+            <Text style={styles.resendPrompt}>Didn't receive the code?</Text>
+            {timer > 0 ? (
+              <View style={styles.timerBadge}>
+                <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                <Text style={styles.timerText}>Resend code in {timer}s</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={handleResend}
+                disabled={resending}
+                activeOpacity={0.7}
+              >
+                {resending ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.resendActionText}>Resend Code</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Footer Navigation */}
+          <TouchableOpacity
+            style={styles.footerLink}
+            onPress={() => navigation.navigate('Register')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.footerLinkText}>
+              Wrong email address? <Text style={styles.footerLinkBold}>Back to Register</Text>
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -378,7 +390,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 17,
-    marginBottom: 16,
+    marginBottom: 14,
     paddingHorizontal: 10,
   },
 
@@ -386,8 +398,10 @@ const styles = StyleSheet.create({
   otpWrapper: {
     position: 'relative',
     width: '100%',
+    height: 56,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginVertical: 6,
   },
   cellsRow: {
     flexDirection: 'row',
@@ -395,6 +409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     width: '100%',
+    height: 56,
   },
   cellBox: {
     width: 46,
@@ -437,9 +452,29 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   hiddenInput: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
     opacity: 0.01,
     color: 'transparent',
+  },
+  tapPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  tapPromptText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
 
   errorContainer: {
