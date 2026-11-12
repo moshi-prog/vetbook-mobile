@@ -191,6 +191,11 @@ export const AuthProvider = ({ children }) => {
   // Logout
   const logout = async () => {
     try {
+      await api.updatePushToken(null);
+    } catch (e) {
+      console.warn('Failed to clear push token on logout:', e?.message);
+    }
+    try {
       // Try to invalidate token on server
       await api.logout();
     } catch (err) {

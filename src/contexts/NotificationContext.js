@@ -22,12 +22,15 @@ import React, {
   useEffect,
 } from 'react';
 import { Vibration } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from './AuthContext';
 import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  updatePushToken,
 } from '../services/api';
+import { registerForPushNotificationsAsync } from '../services/notifications';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
 
@@ -179,6 +182,60 @@ export const NotificationProvider = ({ children }) => {
 
     return () => clearInterval(pollInterval);
   }, [isAuthenticated, fetchNotifications]);
+
+  /**
+   * Remote Push Notifications (Lock Screen, Background & Heads-Up alerts)
+   */
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // 1. Register push token with backend on login
+    (async () => {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (token) {
+          await updatePushToken(token);
+          console.log('[Push] Successfully registered push token with backend.');
+        }
+      } catch (err) {
+        console.warn('[Push] Failed to sync push token with backend:', err.message);
+      }
+    })();
+
+    // 2. Handle notification clicks from Lock Screen / Background
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response?.notification?.request?.content?.data;
+      console.log('[Push] Notification tapped from lockscreen/background:', data);
+      try {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+        }
+      } catch (e) {
+        console.warn('Navigation error on notification tap:', e);
+      }
+    });
+
+    // Check if app was launched directly by tapping a notification while closed/killed
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) {
+          const data = response?.notification?.request?.content?.data;
+          console.log('[Push] App opened from killed state via notification:', data);
+          try {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('MainTabs', { screen: 'Bookings' });
+            }
+          } catch (e) {
+            console.warn('Navigation error on initial notification response:', e);
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      responseListener.remove();
+    };
+  }, [isAuthenticated]);
 
   /**
    * Mark individual notification as read

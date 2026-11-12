@@ -36,6 +36,14 @@
       "expo-font",
       "expo-splash-screen",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4A7C59",
+          "sounds": []
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "VetBook needs access to your photos to upload pet profile pictures and medical records.",

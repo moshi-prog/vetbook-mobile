@@ -23,7 +23,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,12 +35,15 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { getBranches } from '../services/api';
+import { getClinicInfo, saveClinicInfo } from '../services/storage';
 import TermsModal from '../components/TermsModal';
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -79,6 +82,33 @@ const RegisterScreen = ({ navigation }) => {
   const [phoneError, setPhoneError] = useState(null);
   const [passwordError, setPasswordError] = useState(null);
   const [confirmError, setConfirmError] = useState(null);
+
+  // ── Dynamic clinic branding ────────────────────────────────────────────────
+  const [clinic, setClinic] = useState(null);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    getClinicInfo().then((cached) => {
+      if (isMounted && cached) setClinic(cached);
+    });
+
+    getBranches()
+      .then((res) => {
+        if (isMounted && res.data?.clinic) {
+          setClinic(res.data.clinic);
+          setLogoLoadError(false);
+          saveClinicInfo(res.data.clinic);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch clinic branding on register:', err?.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // ── Derived: passwords match (only meaningful when both fields have input) ─
   const passwordsMatch =
@@ -291,6 +321,14 @@ const RegisterScreen = ({ navigation }) => {
 
           {/* Centered brand logo */}
           <View style={styles.appBarCenter}>
+            {clinic?.logo_url && !logoLoadError ? (
+              <Image
+                source={{ uri: clinic.logo_url }}
+                style={styles.logoImage}
+                resizeMode="cover"
+                onError={() => setLogoLoadError(true)}
+              />
+            ) : null}
             <Text style={styles.appBarLogo}>VetBook</Text>
           </View>
 
@@ -509,7 +547,15 @@ const styles = StyleSheet.create({
   },
   appBarCenter: {
     flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing.xs,
+  },
+  logoImage: {
+    width: 26,
+    height: 26,
+    borderRadius: radii.sm,
   },
   appBarLogo: {
     fontFamily: fonts.headingBold,         // Literata_700Bold

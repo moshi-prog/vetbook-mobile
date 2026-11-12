@@ -46,6 +46,7 @@ import {
   markAllNotificationsRead,
   getBranches,
 } from '../services/api';
+import { getClinicInfo, saveClinicInfo } from '../services/storage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -242,6 +243,7 @@ const HomeScreen = ({ navigation }) => {
           ...prev,
           ...response.data.clinic,
         }));
+        saveClinicInfo(response.data.clinic);
       }
     } catch (err) {
       console.warn('Could not refresh clinic branch info:', err.message);
@@ -249,6 +251,11 @@ const HomeScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    getClinicInfo().then((cached) => {
+      if (cached) {
+        setClinic((prev) => ({ ...prev, ...cached }));
+      }
+    });
     fetchBranches();
   }, [fetchBranches]);
 

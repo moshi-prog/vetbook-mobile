@@ -123,6 +123,7 @@ export const updatePushToken = (push_token) => api.post('/user/push-token', { pu
 
 export const sendChatMessage = (data) => api.post('/chatbot/message', data);
 export const getBranches = () => api.get('/branches');
+export const getClinicInfo = () => api.get('/clinic');
 
 // ============= ATTACH HELPERS TO DEFAULT EXPORT =============
 api.register = register;
@@ -151,5 +152,6 @@ api.markAllNotificationsRead = markAllNotificationsRead;
 api.updatePushToken = updatePushToken;
 api.sendChatMessage = sendChatMessage;
 api.getBranches = getBranches;
+api.getClinicInfo = getClinicInfo;
 
 export default api;

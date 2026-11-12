@@ -17,19 +17,22 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
   StatusBar,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { getClinicInfo, saveClinicInfo } from '../services/storage';
+import { getBranches } from '../services/api';
 
 // ─── Auto-advance delay (ms) ────────────────────────────────────────────────
 const SPLASH_DURATION = 2500;
@@ -37,6 +40,31 @@ const SPLASH_DURATION = 2500;
 // ─── Component ───────────────────────────────────────────────────────────────
 const SplashScreen = ({ navigation }) => {
   const { isAuthenticated } = useAuth();
+  const [clinic, setClinic] = useState(null);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    // 1. Instantly load cached clinic branding from local storage
+    getClinicInfo().then((cached) => {
+      if (isMounted && cached) setClinic(cached);
+    });
+
+    // 2. Fetch fresh clinic info from public API
+    getBranches()
+      .then((res) => {
+        if (isMounted && res.data?.clinic) {
+          setClinic(res.data.clinic);
+          setLogoLoadError(false);
+          saveClinicInfo(res.data.clinic);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   /**
    * Auto-navigate to MainTabs if authenticated, or Login screen after SPLASH_DURATION ms.
@@ -75,7 +103,9 @@ const SplashScreen = ({ navigation }) => {
         {/* Left: status dot + clinic name */}
         <View style={styles.clinicRow}>
           <View style={styles.greenDot} />
-          <Text style={styles.clinicText}>BK PETAHOLIC ANIMAL CLINIC</Text>
+          <Text style={styles.clinicText}>
+            {clinic?.name?.toUpperCase() || 'BK PETAHOLIC ANIMAL CLINIC'}
+          </Text>
         </View>
 
         {/* Right: establishment year */}
@@ -85,19 +115,30 @@ const SplashScreen = ({ navigation }) => {
       {/* ── Center content ───────────────────────────────────────────────── */}
       <View style={styles.centerContent}>
 
-        {/* Icon badge: cream rounded square with leaf + paw */}
+        {/* Icon badge: cream rounded square with clinic logo or leaf + paw */}
         <View style={styles.iconBadge}>
-          {/* Leaf — rendered as a rotated Ionicons leaf icon */}
-          <Ionicons
-            name="leaf"
-            size={32}
-            color={colors.primary}
-            style={styles.leafIcon}
-          />
-          {/* Paw — overlaid in the lower-right corner of the badge */}
-          <View style={styles.pawOverlay}>
-            <Ionicons name="paw" size={20} color={colors.primaryLight} />
-          </View>
+          {clinic?.logo_url && !logoLoadError ? (
+            <Image
+              source={{ uri: clinic.logo_url }}
+              style={styles.splashLogoImage}
+              resizeMode="cover"
+              onError={() => setLogoLoadError(true)}
+            />
+          ) : (
+            <>
+              {/* Leaf — rendered as a rotated Ionicons leaf icon */}
+              <Ionicons
+                name="leaf"
+                size={32}
+                color={colors.primary}
+                style={styles.leafIcon}
+              />
+              {/* Paw — overlaid in the lower-right corner of the badge */}
+              <View style={styles.pawOverlay}>
+                <Ionicons name="paw" size={20} color={colors.primaryLight} />
+              </View>
+            </>
+          )}
         </View>
 
         {/* Brand name */}
@@ -207,12 +248,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.xl,
+    overflow: 'hidden',
     // Subtle shadow to lift the card off the background
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
+  },
+  splashLogoImage: {
+    width: 96,
+    height: 96,
+    borderRadius: radii.xl,
   },
   leafIcon: {
     // Slight tilt gives an organic, natural feel matching Figma

@@ -73,6 +73,28 @@ export const clearSession = async () => {
   }
 };
 
+const CLINIC_INFO_KEY = '@vetbook:clinic_info';
+
+export const saveClinicInfo = async (clinic) => {
+  try {
+    await AsyncStorage.setItem(CLINIC_INFO_KEY, JSON.stringify(clinic));
+    return true;
+  } catch (error) {
+    console.error('Error saving clinic info to storage:', error);
+    return false;
+  }
+};
+
+export const getClinicInfo = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(CLINIC_INFO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error('Error getting clinic info from storage:', error);
+    return null;
+  }
+};
+
 export const setUser = saveUser;
 export const setToken = saveToken;
 
@@ -86,5 +108,7 @@ export default {
   removeUser,
   setUser,
   clearSession,
+  saveClinicInfo,
+  getClinicInfo,
 };
 

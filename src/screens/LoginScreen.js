@@ -25,7 +25,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -38,13 +38,15 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
+import api, { getBranches } from '../services/api';
+import { getClinicInfo, saveClinicInfo } from '../services/storage';
 import TermsModal from '../components/TermsModal';
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -80,6 +82,35 @@ const LoginScreen = ({ navigation }) => {
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState(null);
+
+  // ── Dynamic clinic branding ────────────────────────────────────────────────
+  const [clinic, setClinic] = useState(null);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    // 1. Instantly load cached clinic info from AsyncStorage
+    getClinicInfo().then((cached) => {
+      if (isMounted && cached) setClinic(cached);
+    });
+
+    // 2. Fetch fresh clinic info from public API
+    getBranches()
+      .then((res) => {
+        if (isMounted && res.data?.clinic) {
+          setClinic(res.data.clinic);
+          setLogoLoadError(false);
+          saveClinicInfo(res.data.clinic);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch clinic branding on login:', err?.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // ─── Validation ─────────────────────────────────────────────────────────────
   /**
@@ -234,12 +265,21 @@ const LoginScreen = ({ navigation }) => {
             <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
 
-          {/* Center: leaf+paw icon + "VetBook" wordmark */}
+          {/* Center: dynamic clinic logo + "VetBook" wordmark */}
           <View style={styles.appBarCenter}>
-            <View style={styles.logoIconWrapper}>
-              <Ionicons name="leaf" size={14} color={colors.primary} style={styles.logoLeaf} />
-              <Ionicons name="paw" size={10} color={colors.primaryLight} style={styles.logoPaw} />
-            </View>
+            {clinic?.logo_url && !logoLoadError ? (
+              <Image
+                source={{ uri: clinic.logo_url }}
+                style={styles.logoImage}
+                resizeMode="cover"
+                onError={() => setLogoLoadError(true)}
+              />
+            ) : (
+              <View style={styles.logoIconWrapper}>
+                <Ionicons name="leaf" size={14} color={colors.primary} style={styles.logoLeaf} />
+                <Ionicons name="paw" size={10} color={colors.primaryLight} style={styles.logoPaw} />
+              </View>
+            )}
             <Text style={styles.appBarLogo}>VetBook</Text>
           </View>
 
@@ -668,6 +708,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  logoImage: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.sm,
   },
   logoIconWrapper: {
     width: 28,
