@@ -51,7 +51,7 @@ const QUICK_PROMPTS = [
 ];
 
 const FALLBACK_REPLY =
-  "Sorry, I'm having trouble connecting. Please try again or call the clinic at (043) 723-4567.";
+  "Sorry, I'm having trouble connecting right now. Please try again in a moment, or call the clinic at 0956-663-1534.";
 
 const HISTORY_LIMIT = 5;
 
