@@ -76,28 +76,86 @@ export const createPet = (data) => api.post('/pets', data);
 export const updatePet = (id, data) => api.put(`/pets/${id}`, data);
 export const deletePet = (id) => api.delete(`/pets/${id}`);
 
-export const uploadUserAvatar = (imageUri) => {
+/**
+ * Helper to prepare an avatar upload payload compatible across Web (browsers/PWA)
+ * and Native (Expo / iOS / Android).
+ *
+ * On Web: Converts local blob: or file: URIs to Base64 Data URLs so Axios can send
+ * a clean JSON payload without multipart boundary stripping or browser FormData serialization errors.
+ * On Native: Sends standard React Native multipart FormData.
+ */
+export const prepareAvatarRequest = async (imageUri, fieldName = 'avatar') => {
+  if (!imageUri) {
+    throw new Error('No image URI provided');
+  }
+
+  // 1. Already a Base64 data URL
+  if (typeof imageUri === 'string' && imageUri.startsWith('data:image/')) {
+    return {
+      payload: { [fieldName]: imageUri },
+      headers: { 'Content-Type': 'application/json' },
+    };
+  }
+
+  // 2. Web browser environment
+  if (Platform.OS === 'web' && typeof imageUri === 'string') {
+    try {
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      return {
+        payload: { [fieldName]: base64Data },
+        headers: { 'Content-Type': 'application/json' },
+      };
+    } catch (webErr) {
+      console.warn('Web blob conversion error, attempting FormData fallback:', webErr);
+    }
+  }
+
+  // 3. React Native Native (iOS / Android) or FormData fallback
   const formData = new FormData();
-  formData.append('avatar', {
+  if (Platform.OS === 'web') {
+    try {
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      formData.append(fieldName, blob, `${fieldName}.jpg`);
+    } catch {
+      formData.append(fieldName, imageUri);
+    }
+    return {
+      payload: formData,
+      headers: {},
+    };
+  }
+
+  const ext = imageUri.split('.').pop() || 'jpg';
+  const cleanExt = ext.includes('?') ? ext.split('?')[0] : ext;
+  const mimeType = cleanExt.toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+  formData.append(fieldName, {
     uri: imageUri,
-    name: 'avatar.jpg',
-    type: 'image/jpeg',
+    name: `${fieldName}.${cleanExt}`,
+    type: mimeType,
   });
-  return api.post('/user/avatar', formData, {
+
+  return {
+    payload: formData,
     headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  };
 };
 
-export const uploadPetAvatar = (petId, imageUri) => {
-  const formData = new FormData();
-  formData.append('avatar', {
-    uri: imageUri,
-    name: 'pet_avatar.jpg',
-    type: 'image/jpeg',
-  });
-  return api.post(`/pets/${petId}/avatar`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+export const uploadUserAvatar = async (imageUri) => {
+  const { payload, headers } = await prepareAvatarRequest(imageUri, 'avatar');
+  return api.post('/user/avatar', payload, { headers });
+};
+
+export const uploadPetAvatar = async (petId, imageUri) => {
+  const { payload, headers } = await prepareAvatarRequest(imageUri, 'avatar');
+  return api.post(`/pets/${petId}/avatar`, payload, { headers });
 };
 
 // ============= MEDICAL RECORD ENDPOINTS (backend route may not exist yet) =============

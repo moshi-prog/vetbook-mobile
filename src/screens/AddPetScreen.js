@@ -121,10 +121,14 @@ const AddPetScreen = ({ navigation, route }) => {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const pickedUri = result.assets[0].uri;
+        const pickedAsset = result.assets[0];
+        const pickedUri = pickedAsset.base64
+          ? `data:image/jpeg;base64,${pickedAsset.base64}`
+          : pickedAsset.uri;
         setAvatarUrl(pickedUri);
 
         // If editing an existing pet, upload right away
@@ -197,7 +201,8 @@ const AddPetScreen = ({ navigation, route }) => {
       gender,
       weight: weight ? parseFloat(weight) : null,
       medical_conditions: (medicalConditions + (allergies.length ? " Allergies: " + allergies.join(", ") : "")).trim() || null,
-      avatar_url: avatarUrl && avatarUrl.startsWith('http') ? avatarUrl : null,
+      avatar: avatarUrl || null,
+      avatar_url: avatarUrl || null,
     };
 
     setLoading(true);

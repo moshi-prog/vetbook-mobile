@@ -298,10 +298,12 @@ const PetDetailsScreen = ({ route, navigation }) => {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const pickedUri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const pickedUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
         setUploadingAvatar(true);
         try {
           const res = await api.uploadPetAvatar(pet.id, pickedUri);

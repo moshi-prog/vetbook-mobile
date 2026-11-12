@@ -267,13 +267,15 @@ const ProfileScreen = () => {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (pickerResult.canceled || !pickerResult.assets?.[0]?.uri) {
         return;
       }
 
-      const imageUri = pickerResult.assets[0].uri;
+      const asset = pickerResult.assets[0];
+      const imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
       setUploadingAvatar(true);
 
       const res = await uploadUserAvatar(imageUri);
