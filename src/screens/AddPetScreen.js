@@ -28,7 +28,6 @@ import {
   TextInput,
   Switch,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -276,62 +275,58 @@ const AddPetScreen = ({ navigation, route }) => {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView
-        style={styles.kav}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-      >
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
+      <View style={styles.topBar}>
+        {/* Cancel */}
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.cancelBtn}
+          accessibilityLabel="Cancel"
+        >
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
 
-        {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
-        <View style={styles.topBar}>
-          {/* Cancel */}
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.cancelBtn}
-            accessibilityLabel="Cancel"
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-
-          {/* Center title */}
-          <View style={styles.topBarCenter}>
-            <Text style={styles.topBarTitle}>{isEditMode ? 'Edit Pet' : 'Add New Pet'}</Text>
-            <Text style={styles.topBarSubtitle}>{isEditMode ? 'Update profile' : 'Pet profile'}</Text>
-          </View>
-
-          {/* Save pill */}
-          <TouchableOpacity
-            style={[styles.savePill, loading && styles.savePillDisabled]}
-            activeOpacity={0.85}
-            onPress={handleSave}
-            disabled={loading}
-            accessibilityLabel="Save pet"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={14} color={colors.white} />
-                <Text style={styles.savePillText}>Save</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {/* Center title */}
+        <View style={styles.topBarCenter}>
+          <Text style={styles.topBarTitle}>{isEditMode ? 'Edit Pet' : 'Add New Pet'}</Text>
+          <Text style={styles.topBarSubtitle}>{isEditMode ? 'Update profile' : 'Pet profile'}</Text>
         </View>
 
-        {/* ── Scrollable form body ─────────────────────────────────────── */}
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: 140 + insets.bottom },
-          ]}
-          showsVerticalScrollIndicator={true}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          bounces={true}
-          alwaysBounceVertical={true}
+        {/* Save pill */}
+        <TouchableOpacity
+          style={[styles.savePill, loading && styles.savePillDisabled]}
+          activeOpacity={0.85}
+          onPress={handleSave}
+          disabled={loading}
+          accessibilityLabel="Save pet"
         >
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark" size={14} color={colors.white} />
+              <Text style={styles.savePillText}>Save</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Scrollable form body ─────────────────────────────────────── */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 160 + insets.bottom },
+        ]}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
+        showsVerticalScrollIndicator={true}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces={true}
+        alwaysBounceVertical={true}
+      >
 
           {/* ── 2. Photo Upload ───────────────────────────────────────── */}
           <View style={styles.photoCard}>
@@ -391,6 +386,7 @@ const AddPetScreen = ({ navigation, route }) => {
               <Text style={styles.fieldLabel}>Species</Text>
               <ScrollView
                 horizontal
+                nestedScrollEnabled={true}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipsRow}
               >
@@ -674,7 +670,6 @@ const AddPetScreen = ({ navigation, route }) => {
           {/* Bottom spacer */}
           <View style={{ height: spacing.xxxl }} />
         </ScrollView>
-      </KeyboardAvoidingView>
 
       {/* ── Confirmation Dialog ────────────────────────────────────────── */}
       <ThemedDialog
@@ -709,9 +704,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  kav: {
-    flex: 1,
   },
 
   // ── Top Bar ─────────────────────────────────────────────────────────────
@@ -771,13 +763,10 @@ const styles = StyleSheet.create({
   // ── Scroll ──────────────────────────────────────────────────────────────
   scroll: {
     flex: 1,
-    width: '100%',
   },
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: spacing.base,
     paddingTop: spacing.base,
-    gap: spacing.base,
   },
 
   // ── Photo Upload Card ────────────────────────────────────────────────────
@@ -789,7 +778,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.base,
   },
   photoCircle: {
     width: 112,
@@ -846,6 +835,7 @@ const styles = StyleSheet.create({
     gap: spacing.base,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.base,
   },
   sectionHeader: {
     flexDirection: 'row',
