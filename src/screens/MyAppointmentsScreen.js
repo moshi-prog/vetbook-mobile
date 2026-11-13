@@ -271,6 +271,9 @@ const MyAppointmentsScreen = ({ navigation }) => {
     ) || {
       weekday_open: '09:00',
       weekday_close: '18:00',
+      saturday_open: '09:00',
+      saturday_close: '18:00',
+      saturday_closed: false,
       sunday_open: '10:00',
       sunday_close: '16:00',
       sunday_closed: false,
@@ -461,6 +464,9 @@ const MyAppointmentsScreen = ({ navigation }) => {
     ) || {
       weekday_open: '09:00',
       weekday_close: '18:00',
+      saturday_open: '09:00',
+      saturday_close: '18:00',
+      saturday_closed: false,
       sunday_open: '10:00',
       sunday_close: '16:00',
       sunday_closed: false,

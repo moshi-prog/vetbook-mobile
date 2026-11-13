@@ -22,20 +22,31 @@ export function generateTimeSlots(branch, selectedDate) {
       ? new Date(selectedDate.includes('T') ? selectedDate : selectedDate + 'T00:00:00')
       : new Date(selectedDate);
 
-  const day = dateObj.getDay(); // 0 is Sunday
+  const day = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
   const isSunday = day === 0;
+  const isSaturday = day === 6;
+
+  if (isSaturday && branch?.saturday_closed) {
+    return { closed: true, slots: [] };
+  }
 
   if (isSunday && branch?.sunday_closed) {
     return { closed: true, slots: [] };
   }
 
-  const openStr = isSunday
-    ? (branch?.sunday_open || '10:00')
-    : (branch?.weekday_open || '09:00');
+  let openStr;
+  let closeStr;
 
-  const closeStr = isSunday
-    ? (branch?.sunday_close || '16:00')
-    : (branch?.weekday_close || '18:00');
+  if (isSaturday) {
+    openStr = branch?.saturday_open || branch?.weekday_open || '09:00';
+    closeStr = branch?.saturday_close || branch?.weekday_close || '18:00';
+  } else if (isSunday) {
+    openStr = branch?.sunday_open || '10:00';
+    closeStr = branch?.sunday_close || '16:00';
+  } else {
+    openStr = branch?.weekday_open || '09:00';
+    closeStr = branch?.weekday_close || '18:00';
+  }
 
   if (!openStr || !closeStr) {
     return { closed: false, slots: [] };

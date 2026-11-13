@@ -56,6 +56,9 @@ const BRANCHES = [
     open: true,
     weekday_open: '09:00',
     weekday_close: '18:00',
+    saturday_open: '09:00',
+    saturday_close: '18:00',
+    saturday_closed: false,
     sunday_open: '10:00',
     sunday_close: '16:00',
     sunday_closed: false,
@@ -68,6 +71,9 @@ const BRANCHES = [
     open: false,
     weekday_open: '09:00',
     weekday_close: '18:00',
+    saturday_open: '09:00',
+    saturday_close: '18:00',
+    saturday_closed: false,
     sunday_open: '10:00',
     sunday_close: '16:00',
     sunday_closed: false,
@@ -118,18 +124,22 @@ const formatSlot = (slot) => {
   return `${hour12}:${pad(m)} ${suffix}`;
 };
 
-/** Next `count` days starting today. Checks branch Sunday status. */
+/** Next `count` days starting today. Checks branch Saturday/Sunday status. */
 const generateDates = (count, branch) => {
   const today = new Date();
   return Array.from({ length: count }, (_, i) => {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
-    const isSunday = date.getDay() === 0;
-    const isAvailable = isSunday ? !branch?.sunday_closed : true;
+    const dayOfWeek = date.getDay();
+    const isSunday = dayOfWeek === 0;
+    const isSaturday = dayOfWeek === 6;
+    let available = true;
+    if (isSunday && branch?.sunday_closed) available = false;
+    if (isSaturday && branch?.saturday_closed) available = false;
     return {
       date,
       day: date.toLocaleDateString('en-US', { weekday: 'short' }),
       num: date.getDate(),
-      available: isAvailable,
+      available,
     };
   });
 };
@@ -203,6 +213,9 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             open: true,
             weekday_open: b.weekday_open || '09:00',
             weekday_close: b.weekday_close || '18:00',
+            saturday_open: b.saturday_open || b.weekday_open || '09:00',
+            saturday_close: b.saturday_close || b.weekday_close || '18:00',
+            saturday_closed: !!b.saturday_closed,
             sunday_open: b.sunday_open || '10:00',
             sunday_close: b.sunday_close || '16:00',
             sunday_closed: !!b.sunday_closed,
