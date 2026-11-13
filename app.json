@@ -17,17 +17,15 @@
     "android": {
       "package": "com.vetbook.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1664B8",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "name": "VetBook",
       "shortName": "VetBook",
-      "themeColor": "#4A7C59",
+      "themeColor": "#1664B8",
       "backgroundColor": "#FAF6F0",
       "display": "standalone",
       "orientation": "portrait"
