@@ -336,14 +336,6 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     if (idx !== visibleDateIdx) setVisibleDateIdx(idx);
   };
 
-  const handleSeeMore = () => {
-    if (daysCount >= MAX_DAYS) {
-      Alert.alert('Booking window', `Appointments can be booked up to ${MAX_DAYS} days ahead.`);
-      return;
-    }
-    setDaysCount((c) => Math.min(MAX_DAYS, c + INITIAL_DAYS));
-  };
-
   const finishBooking = (appointment) => {
     navigation.replace('AppointmentConfirmation', {
       appointment,
@@ -563,14 +555,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
           {/* ── 5. Choose Date ────────────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionHeading
-              title="Choose Date"
-              right={
-                <TouchableOpacity onPress={handleSeeMore} accessibilityLabel="See more dates">
-                  <Text style={styles.link}>See more</Text>
-                </TouchableOpacity>
-              }
-            />
+            <SectionHeading title="Choose Date" />
             <View style={styles.monthRow}>
               <TouchableOpacity
                 style={styles.monthBtn}
