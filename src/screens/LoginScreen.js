@@ -51,7 +51,6 @@ import TermsModal from '../components/TermsModal';
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^09\d{9}$/;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -75,11 +74,7 @@ const LoginScreen = ({ navigation }) => {
   const [forgotModalVisible, setForgotModalVisible] = useState(false);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
-  const [resetPhone, setResetPhone] = useState('');
-  const [resetNewPassword, setResetNewPassword] = useState('');
-  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
-  const [showResetPassword, setShowResetPassword] = useState(false);
-  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState(null);
 
@@ -180,11 +175,7 @@ const LoginScreen = ({ navigation }) => {
   // ─── Forgot password actions ───────────────────────────────────────────────
   const handleForgotPassword = () => {
     setResetEmail(email.trim());
-    setResetPhone('');
-    setResetNewPassword('');
-    setResetConfirmPassword('');
-    setShowResetPassword(false);
-    setShowResetConfirmPassword(false);
+    setResetSent(false);
     setResetError(null);
     setForgotModalVisible(true);
   };
@@ -193,46 +184,17 @@ const LoginScreen = ({ navigation }) => {
     setResetError(null);
 
     const trimmedEmail = resetEmail.trim().toLowerCase();
-    const trimmedPhone = resetPhone.trim();
 
     if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
       setResetError('Please enter a valid email address.');
       return;
     }
 
-    if (!trimmedPhone || !PHONE_REGEX.test(trimmedPhone)) {
-      setResetError('Please enter an 11-digit mobile number starting with 09 (e.g. 09XXXXXXXXX).');
-      return;
-    }
-
-    if (!resetNewPassword || resetNewPassword.length < 6) {
-      setResetError('New password must be at least 6 characters.');
-      return;
-    }
-
-    if (resetNewPassword !== resetConfirmPassword) {
-      setResetError('Password confirmation does not match.');
-      return;
-    }
-
     setResetLoading(true);
     try {
-      const response = await api.resetPassword({
-        email: trimmedEmail,
-        phone_number: trimmedPhone,
-        password: resetNewPassword,
-        password_confirmation: resetConfirmPassword,
-      });
-
-      setForgotModalVisible(false);
-      setEmail(trimmedEmail);
-      setPassword('');
-      setErrorMessage(null);
-
-      const successMsg =
-        response.data?.message ||
-        'Password has been reset successfully. You can now log in with your new password.';
-      Alert.alert('Password Reset Successful', successMsg);
+      await api.forgotPassword(trimmedEmail);
+      setResetEmail(trimmedEmail);
+      setResetSent(true);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
@@ -240,7 +202,7 @@ const LoginScreen = ({ navigation }) => {
           ? Object.values(err.response.data.errors).flat().join('\n')
           : null) ||
         err.message ||
-        'Failed to reset password. Please check your credentials and try again.';
+        'Failed to send reset link. Please try again.';
       setResetError(msg);
     } finally {
       setResetLoading(false);
@@ -284,14 +246,8 @@ const LoginScreen = ({ navigation }) => {
             <Text style={styles.appBarLogo}>VetBook</Text>
           </View>
 
-          {/* Help icon */}
-          <TouchableOpacity
-            style={styles.appBarIconBtn}
-            onPress={() => Alert.alert('Help', 'Contact support at vetbookbkpetaholic@gmail.com')}
-            accessibilityLabel="Help"
-          >
-            <Ionicons name="help-circle-outline" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
+          {/* Right spacer for balanced header alignment */}
+          <View style={styles.appBarIconBtn} />
         </View>
 
         {/* ── Scrollable content ────────────────────────────────────────── */}
@@ -477,189 +433,109 @@ const LoginScreen = ({ navigation }) => {
             style={styles.modalOverlay}
           >
             <View style={styles.sheetContainer}>
-              <View style={styles.sheetHeader}>
-                <View style={styles.sheetHeaderLeft}>
-                  <View style={styles.sheetIconBadge}>
-                    <Ionicons name="key-outline" size={20} color={colors.primary} />
+              {!resetSent ? (
+                <>
+                  <View style={styles.sheetHeader}>
+                    <View style={styles.sheetHeaderLeft}>
+                      <View style={styles.sheetIconBadge}>
+                        <Ionicons name="key-outline" size={20} color={colors.primary} />
+                      </View>
+                      <View style={styles.sheetHeaderText}>
+                        <Text style={styles.sheetTitle}>Forgot Password</Text>
+                        <Text style={styles.sheetSub}>
+                          Enter your registered email address and we'll send you a link to reset your password.
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setForgotModalVisible(false)}
+                      style={styles.sheetCloseBtn}
+                      disabled={resetLoading}
+                      accessibilityLabel="Close dialog"
+                    >
+                      <Ionicons name="close" size={20} color={colors.textPrimary} />
+                    </TouchableOpacity>
                   </View>
-                  <View style={styles.sheetHeaderText}>
-                    <Text style={styles.sheetTitle}>Reset Password</Text>
-                    <Text style={styles.sheetSub}>
-                      Enter your registered email and phone number to verify your account.
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setForgotModalVisible(false)}
-                  style={styles.sheetCloseBtn}
-                  disabled={resetLoading}
-                  accessibilityLabel="Close dialog"
-                >
-                  <Ionicons name="close" size={20} color={colors.textPrimary} />
-                </TouchableOpacity>
-              </View>
 
-              {/* Error Banner */}
-              {!!resetError && (
-                <View style={styles.resetErrorBanner}>
-                  <Ionicons name="alert-circle-outline" size={16} color={colors.alertRed} />
-                  <Text style={styles.resetErrorText}>{resetError}</Text>
+                  {/* Error Banner */}
+                  {!!resetError && (
+                    <View style={styles.resetErrorBanner}>
+                      <Ionicons name="alert-circle-outline" size={16} color={colors.alertRed} />
+                      <Text style={styles.resetErrorText}>{resetError}</Text>
+                    </View>
+                  )}
+
+                  {/* Registered Email Address */}
+                  <View style={styles.modalFieldWrapper}>
+                    <Text style={styles.fieldLabel}>REGISTERED EMAIL</Text>
+                    <View style={styles.inputRow}>
+                      <Ionicons
+                        name="mail-outline"
+                        size={18}
+                        color={colors.textSecondary}
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={styles.textInput}
+                        value={resetEmail}
+                        onChangeText={setResetEmail}
+                        placeholder="sarah.jenkins@example.com"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="email"
+                        returnKeyType="done"
+                        onSubmitEditing={handleResetSubmit}
+                        editable={!resetLoading}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Modal Action Buttons */}
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={styles.modalCancelBtn}
+                      onPress={() => setForgotModalVisible(false)}
+                      disabled={resetLoading}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.modalSubmitBtn, resetLoading && styles.modalSubmitBtnDisabled]}
+                      onPress={handleResetSubmit}
+                      disabled={resetLoading}
+                      activeOpacity={0.85}
+                    >
+                      {resetLoading ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                      ) : (
+                        <Text style={styles.modalSubmitText}>Send Reset Link</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.sentContainer}>
+                  <View style={styles.sentIconCircle}>
+                    <Ionicons name="checkmark-circle" size={44} color={colors.primary} />
+                  </View>
+                  <Text style={styles.sentTitle}>Check Your Email</Text>
+                  <Text style={styles.sentMessage}>
+                    We have sent password reset instructions to{' '}
+                    <Text style={styles.sentEmailHighlight}>{resetEmail}</Text>. Please check your inbox and spam folder.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.sentBtn}
+                    onPress={() => setForgotModalVisible(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.modalSubmitText}>Back to Login</Text>
+                  </TouchableOpacity>
                 </View>
               )}
-
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                style={styles.modalScroll}
-              >
-                {/* Email Address */}
-                <View style={styles.modalFieldWrapper}>
-                  <Text style={styles.fieldLabel}>REGISTERED EMAIL</Text>
-                  <View style={styles.inputRow}>
-                    <Ionicons
-                      name="mail-outline"
-                      size={18}
-                      color={colors.textSecondary}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.textInput}
-                      value={resetEmail}
-                      onChangeText={setResetEmail}
-                      placeholder="sarah.jenkins@example.com"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="email"
-                      returnKeyType="next"
-                      editable={!resetLoading}
-                    />
-                  </View>
-                </View>
-
-                {/* Mobile Number */}
-                <View style={styles.modalFieldWrapper}>
-                  <Text style={styles.fieldLabel}>11-DIGIT MOBILE NUMBER</Text>
-                  <View style={styles.inputRow}>
-                    <Ionicons
-                      name="call-outline"
-                      size={18}
-                      color={colors.textSecondary}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.textInput}
-                      value={resetPhone}
-                      onChangeText={setResetPhone}
-                      placeholder="09XXXXXXXXX"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="phone-pad"
-                      maxLength={11}
-                      returnKeyType="next"
-                      editable={!resetLoading}
-                    />
-                  </View>
-                </View>
-
-                {/* New Password */}
-                <View style={styles.modalFieldWrapper}>
-                  <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
-                  <View style={styles.inputRow}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={18}
-                      color={colors.textSecondary}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.textInput}
-                      value={resetNewPassword}
-                      onChangeText={setResetNewPassword}
-                      placeholder="At least 6 characters"
-                      placeholderTextColor={colors.textMuted}
-                      secureTextEntry={!showResetPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="next"
-                      editable={!resetLoading}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowResetPassword((v) => !v)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel={showResetPassword ? 'Hide password' : 'Show password'}
-                    >
-                      <Ionicons
-                        name={showResetPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={18}
-                        color={colors.textSecondary}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Confirm New Password */}
-                <View style={styles.modalFieldWrapper}>
-                  <Text style={styles.fieldLabel}>CONFIRM NEW PASSWORD</Text>
-                  <View style={styles.inputRow}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={18}
-                      color={colors.textSecondary}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.textInput}
-                      value={resetConfirmPassword}
-                      onChangeText={setResetConfirmPassword}
-                      placeholder="Confirm new password"
-                      placeholderTextColor={colors.textMuted}
-                      secureTextEntry={!showResetConfirmPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      onSubmitEditing={handleResetSubmit}
-                      editable={!resetLoading}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowResetConfirmPassword((v) => !v)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel={showResetConfirmPassword ? 'Hide password' : 'Show password'}
-                    >
-                      <Ionicons
-                        name={showResetConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={18}
-                        color={colors.textSecondary}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </ScrollView>
-
-              {/* Modal Action Buttons */}
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setForgotModalVisible(false)}
-                  disabled={resetLoading}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modalSubmitBtn, resetLoading && styles.modalSubmitBtnDisabled]}
-                  onPress={handleResetSubmit}
-                  disabled={resetLoading}
-                  activeOpacity={0.85}
-                >
-                  {resetLoading ? (
-                    <ActivityIndicator size="small" color={colors.white} />
-                  ) : (
-                    <Text style={styles.modalSubmitText}>Reset Password</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
             </View>
           </KeyboardAvoidingView>
         </Modal>
@@ -1072,6 +948,52 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: colors.white,
     letterSpacing: 0.3,
+  },
+  sentContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  sentIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primaryPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.base,
+  },
+  sentTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.xxl,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  sentMessage: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.sm,
+  },
+  sentEmailHighlight: {
+    fontFamily: fonts.bodySemiBold,
+    color: colors.textPrimary,
+  },
+  sentBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primaryDeep,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   termsRow: {
     flexDirection: 'row',
