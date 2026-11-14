@@ -64,7 +64,7 @@ const BRANCHES = [
     sunday_closed: false,
   },
   {
-    id: 'batangas',
+    id: 'batangas_city',
     name: 'Batangas City Branch',
     address: 'N.F. Almario Building, Kumintang Ilaya',
     footer: 'Opens at 9:00 AM',
