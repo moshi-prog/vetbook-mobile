@@ -29,10 +29,12 @@ import {
   ScrollView,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 
@@ -166,33 +168,89 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
     });
   };
 
-  const handleAddToCalendar = () => {
-    const title = encodeURIComponent(`Vet Appointment for ${petName}`);
-    const loc = encodeURIComponent(branchName || 'VetBook Animal Clinic');
-    const details = encodeURIComponent(
-      `Appointment for ${petName}. Reason: ${reasonText || 'General Visit'}. Managed via VetBook.`
-    );
+  const handleAddToCalendar = async () => {
+    const eventTitle = `Vet Appointment for ${petName}`;
+    const eventLocation = branchName || 'VetBook Animal Clinic';
+    const eventDescription = `Appointment for ${petName}. Reason: ${reasonText || 'General Visit'}. Managed via VetBook.`;
 
+    const effectiveDate = parsedDate || parseLocalDate(appointment?.appointment_date) || new Date();
     const rawTime = time || appointment?.appointment_time;
-    let datesParam = '';
-    if (parsedDate && rawTime) {
-      const [h, m] = String(rawTime).split(':').map(Number);
-      if (!Number.isNaN(h) && !Number.isNaN(m)) {
-        const startDate = new Date(
-          parsedDate.getFullYear(),
-          parsedDate.getMonth(),
-          parsedDate.getDate(),
-          h,
-          m,
-          0
-        );
-        const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
-        const fmtCal = (d) =>
-          `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
-        datesParam = `&dates=${fmtCal(startDate)}/${fmtCal(endDate)}`;
+
+    let startDate = new Date(
+      effectiveDate.getFullYear(),
+      effectiveDate.getMonth(),
+      effectiveDate.getDate(),
+      9,
+      0,
+      0
+    );
+    let hasExactTime = false;
+
+    if (rawTime) {
+      const timeMatch = /(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i.exec(String(rawTime));
+      if (timeMatch) {
+        let h = Number(timeMatch[1]);
+        const m = Number(timeMatch[2]);
+        const meridiem = timeMatch[3]?.toUpperCase();
+        if (meridiem === 'PM' && h < 12) h += 12;
+        if (meridiem === 'AM' && h === 12) h = 0;
+
+        if (!Number.isNaN(h) && !Number.isNaN(m)) {
+          startDate = new Date(
+            effectiveDate.getFullYear(),
+            effectiveDate.getMonth(),
+            effectiveDate.getDate(),
+            h,
+            m,
+            0
+          );
+          hasExactTime = true;
+        }
       }
     }
 
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+
+    try {
+      if (Platform.OS === 'android') {
+        await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+          data: 'content://com.android.calendar/events',
+          type: 'vnd.android.cursor.item/event',
+          extra: {
+            title: eventTitle,
+            description: eventDescription,
+            eventLocation,
+            beginTime: startDate.getTime(),
+            endTime: endDate.getTime(),
+            allDay: false,
+          },
+        });
+        return;
+      }
+
+      if (Platform.OS === 'ios') {
+        const iosCalUrl = `calshow:${startDate.getTime() / 1000}`;
+        const canOpen = await Linking.canOpenURL(iosCalUrl);
+        if (canOpen) {
+          await Linking.openURL(iosCalUrl);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Calendar] Native calendar launch failed, falling back to web calendar:', err?.message || err);
+    }
+
+    // Fallback for Web or when native calendar launch fails
+    let datesParam = '';
+    if ((parsedDate || appointment?.appointment_date) && hasExactTime) {
+      const fmtCal = (d) =>
+        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      datesParam = `&dates=${fmtCal(startDate)}/${fmtCal(endDate)}`;
+    }
+
+    const title = encodeURIComponent(eventTitle);
+    const loc = encodeURIComponent(eventLocation);
+    const details = encodeURIComponent(eventDescription);
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}&details=${details}${datesParam}`;
     Linking.openURL(url).catch(() => Alert.alert('Notice', 'Could not open calendar app.'));
   };
