@@ -2,7 +2,7 @@
   "expo": {
     "name": "VetBook",
     "slug": "mobile-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,6 +16,8 @@
     },
     "android": {
       "package": "com.vetbook.mobile",
+      "versionCode": 2,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#1664B8",
         "foregroundImage": "./assets/android-icon-foreground.png"

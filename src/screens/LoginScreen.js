@@ -259,7 +259,8 @@ const LoginScreen = ({ navigation }) => {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {/* ── Top App Bar (72 px) ───────────────────────────────────────── */}
         <View style={styles.appBar}>
@@ -491,11 +492,17 @@ const LoginScreen = ({ navigation }) => {
           onRequestClose={() => !resetLoading && setForgotModalVisible(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             style={styles.modalOverlay}
           >
             <View style={styles.sheetContainer}>
-              {!resetSent ? (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 24 }}
+              >
+                {!resetSent ? (
                 <>
                   <View style={styles.sheetHeader}>
                     <View style={styles.sheetHeaderLeft}>
@@ -598,6 +605,7 @@ const LoginScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               )}
+              </ScrollView>
             </View>
           </KeyboardAvoidingView>
         </Modal>

@@ -30,6 +30,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -279,7 +280,12 @@ const AddPetScreen = ({ navigation, route }) => {
       ]}
       edges={['top']}
     >
-      {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        {/* ── 1. Top Bar ────────────────────────────────────────────────── */}
       <View style={styles.topBar}>
         {/* Cancel */}
         <TouchableOpacity
@@ -679,6 +685,7 @@ const AddPetScreen = ({ navigation, route }) => {
           )}
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
 
       {/* ── Confirmation Dialog ────────────────────────────────────────── */}
       <ThemedDialog
@@ -709,6 +716,9 @@ const AddPetScreen = ({ navigation, route }) => {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
 
   safeArea: {
     flex: 1,

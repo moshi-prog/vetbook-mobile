@@ -33,6 +33,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -135,6 +137,36 @@ const sortKey = (a) =>
 
 /** Status → { bg, text, dot } from the theme (falls back to the neutral 'completed' style). */
 const getStatusColor = (status) => statusColors[normStatus(status)] ?? statusColors.completed;
+
+const DEFAULT_BRANCH_HOURS = {
+  weekday_open: '09:00',
+  weekday_close: '18:00',
+  saturday_open: '09:00',
+  saturday_close: '18:00',
+  saturday_closed: false,
+  sunday_open: '10:00',
+  sunday_close: '16:00',
+  sunday_closed: false,
+};
+
+const findBranchMatch = (branches, branchName) => {
+  const target = String(branchName ?? '').trim().toLowerCase();
+  if (!target || !Array.isArray(branches) || branches.length === 0) {
+    return DEFAULT_BRANCH_HOURS;
+  }
+
+  const matched = branches.find((b) => {
+    const name = String(b?.name ?? '').trim().toLowerCase();
+    const id = String(b?.id ?? '').trim().toLowerCase();
+    if (name === target || id === target) return true;
+    if (name && (name.includes(target) || target.includes(name))) return true;
+    if (target.includes('mabini') && name.includes('mabini')) return true;
+    if (target.includes('batangas') && name.includes('batangas')) return true;
+    return false;
+  });
+
+  return matched || DEFAULT_BRANCH_HOURS;
+};
 
 // ─── Appointment card ────────────────────────────────────────────────────────
 
@@ -294,20 +326,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
   // Dynamic Time Slots based on appointment branch operating hours
   const reschedBranchObj = React.useMemo(() => {
     if (!reschedulingAppt) return null;
-    return branches.find((b) =>
-      b.name === reschedulingAppt.branch ||
-      b.id === reschedulingAppt.branch ||
-      (reschedulingAppt.branch && b.name.toLowerCase().includes(reschedulingAppt.branch.toLowerCase()))
-    ) || {
-      weekday_open: '09:00',
-      weekday_close: '18:00',
-      saturday_open: '09:00',
-      saturday_close: '18:00',
-      saturday_closed: false,
-      sunday_open: '10:00',
-      sunday_close: '16:00',
-      sunday_closed: false,
-    };
+    return findBranchMatch(branches, reschedulingAppt.branch);
   }, [branches, reschedulingAppt]);
 
   const { closed: isReschedClosed, slots: reschedSlots } = React.useMemo(() => {
@@ -512,18 +531,10 @@ const MyAppointmentsScreen = ({ navigation }) => {
     const currentDate = a.appointment_date ? a.appointment_date.split('T')[0] : availableDays[0].dateStr;
     setSelectedRescheduleDate(currentDate);
 
-    const bObj = branches.find((b) =>
-      b.name === a.branch || b.id === a.branch || (a.branch && b.name.toLowerCase().includes(a.branch.toLowerCase()))
-    ) || {
-      weekday_open: '09:00',
-      weekday_close: '18:00',
-      saturday_open: '09:00',
-      saturday_close: '18:00',
-      saturday_closed: false,
-      sunday_open: '10:00',
-      sunday_close: '16:00',
-      sunday_closed: false,
-    };
+    const bObj = findBranchMatch(branches, a.branch);
+    if (branches.length === 0) {
+      fetchBranches();
+    }
     const { slots } = generateTimeSlots(bObj, currentDate);
     const existingTime = a.appointment_time ? a.appointment_time.slice(0, 5) : '';
     if (slots.includes(existingTime)) {
@@ -779,7 +790,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={() => setRescheduleModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
@@ -796,7 +811,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
               {/* Date Selection */}
               <Text style={styles.modalSectionLabel}>CHOOSE NEW DATE</Text>
               <ScrollView
@@ -853,7 +872,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
                         onPress={() => setSelectedRescheduleTime(slot)}
                         disabled={booked}
                         activeOpacity={0.8}
-                        accessibilityLabel={`${slot}${booked ? ', booked' : ''}`}
+                        accessibilityLabel={`${formatTime(slot)}${booked ? ', booked' : ''}`}
                       >
                         <Text
                           style={[
@@ -862,7 +881,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
                             booked && styles.timeSlotTextDisabled,
                           ]}
                         >
-                          {slot}
+                          {formatTime(slot)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -895,7 +914,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Cancellation Reason Modal ─────────────────────────────────────── */}
@@ -905,7 +924,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={() => !submittingCancel && setCancelModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
@@ -925,7 +948,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
               {/* Pet / Appointment info badge */}
               {cancellingAppt && (
                 <View style={styles.cancelInfoBox}>
@@ -1008,7 +1035,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Themed Custom Dialog / Alert */}
@@ -1432,13 +1459,13 @@ const styles = StyleSheet.create({
   },
   timeSlot: {
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.borderLight,
     alignItems: 'center',
-    minWidth: '28%',
+    minWidth: '30%',
   },
   timeSlotActive: {
     backgroundColor: colors.primary,

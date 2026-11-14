@@ -38,6 +38,7 @@ import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import api, { uploadUserAvatar, sendTestPushNotification } from '../services/api';
+import { presentLocalNotificationAsync, isLocalNotificationToken } from '../services/notifications';
 import ThemedDialog from '../components/ThemedDialog';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -162,6 +163,9 @@ const ProfileScreen = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [branches, setBranches] = useState(DEFAULT_CLINIC_BRANCHES);
   const [clinic, setClinic] = useState({
@@ -364,6 +368,9 @@ const ProfileScreen = () => {
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
     setChangePasswordVisible(true);
   };
 
@@ -438,11 +445,45 @@ const ProfileScreen = () => {
   const handleTestPushNotification = async () => {
     if (testingPush) return;
     setTestingPush(true);
+    let token = null;
     try {
       // 1. Ensure push token is active and synced with the backend (pass true for user gesture on web)
-      await syncPushToken?.(true);
+      token = await syncPushToken?.(true);
 
-      // 2. Dispatch test push from backend
+      // 2. Standalone Android/iOS APK fallback when FCM / Expo remote push is unavailable
+      if (Platform.OS !== 'web' && (!token || isLocalNotificationToken(token))) {
+        const displayed = await presentLocalNotificationAsync({
+          title: 'VetBook Test Notification 🐾',
+          body: 'Notifications are active on your device! Appointment updates and reminders will appear here.',
+          data: { type: 'test_push' },
+          requestPermissionIfNeeded: true,
+        });
+
+        if (token) {
+          try {
+            await sendTestPushNotification();
+          } catch {
+            // Local notification already delivered cleanly to device tray
+          }
+        }
+
+        if (displayed) {
+          showDialog(
+            'Notification Sent 🐾',
+            'A test notification has been delivered to your device notification tray.',
+            'success'
+          );
+        } else {
+          showDialog(
+            'Permission Required',
+            'Please enable notifications for VetBook in your phone Settings to receive alerts.',
+            'error'
+          );
+        }
+        return;
+      }
+
+      // 3. Dispatch remote test push from backend (Expo Push / Web Push)
       const res = await sendTestPushNotification();
       showDialog(
         'Push Dispatched 🐾',
@@ -450,6 +491,23 @@ const ProfileScreen = () => {
         'success'
       );
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        const displayed = await presentLocalNotificationAsync({
+          title: 'VetBook Test Notification 🐾',
+          body: 'Notifications are active on your device! Appointment updates and reminders will appear here.',
+          data: { type: 'test_push' },
+          requestPermissionIfNeeded: true,
+        });
+        if (displayed) {
+          showDialog(
+            'Local Notification Sent 🐾',
+            'Remote push was unavailable, so a local notification was sent directly to your device tray.',
+            'success'
+          );
+          return;
+        }
+      }
+
       const msg =
         err?.response?.data?.message ||
         err?.message ||
@@ -581,7 +639,11 @@ const ProfileScreen = () => {
       {/* MODAL 1: Edit Profile                                                */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       <Modal visible={editProfileVisible} transparent animationType="slide" onRequestClose={() => setEditProfileVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          style={styles.modalOverlay}
+        >
           <View style={styles.sheetContainer}>
             <View style={styles.sheetHeader}>
               <View>
@@ -593,47 +655,53 @@ const ProfileScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Maria Santos"
-                placeholderTextColor={colors.borderDashed}
-                value={profileName}
-                onChangeText={setProfileName}
-              />
-            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Full Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Maria Santos"
+                  placeholderTextColor={colors.borderDashed}
+                  value={profileName}
+                  onChangeText={setProfileName}
+                />
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Mobile Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="09XXXXXXXXX"
-                placeholderTextColor={colors.borderDashed}
-                value={profilePhone}
-                onChangeText={setProfilePhone}
-                keyboardType="phone-pad"
-                maxLength={11}
-              />
-              <Text style={styles.hintText}>Used for appointment confirmation and vaccine reminder texts.</Text>
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Mobile Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="09XXXXXXXXX"
+                  placeholderTextColor={colors.borderDashed}
+                  value={profilePhone}
+                  onChangeText={setProfilePhone}
+                  keyboardType="phone-pad"
+                  maxLength={11}
+                />
+                <Text style={styles.hintText}>Used for appointment confirmation and vaccine reminder texts.</Text>
+              </View>
 
-            <View style={styles.sheetActions}>
-              <TouchableOpacity style={styles.cancelActionBtn} onPress={() => setEditProfileVisible(false)}>
-                <Text style={styles.cancelActionText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveActionBtn, savingProfile && styles.btnDisabled]}
-                onPress={handleSaveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <Text style={styles.saveActionText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+              <View style={styles.sheetActions}>
+                <TouchableOpacity style={styles.cancelActionBtn} onPress={() => setEditProfileVisible(false)}>
+                  <Text style={styles.cancelActionText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveActionBtn, savingProfile && styles.btnDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.saveActionText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -642,7 +710,11 @@ const ProfileScreen = () => {
       {/* MODAL 2: Change Password                                             */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       <Modal visible={changePasswordVisible} transparent animationType="slide" onRequestClose={() => setChangePasswordVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          style={styles.modalOverlay}
+        >
           <View style={styles.sheetContainer}>
             <View style={styles.sheetHeader}>
               <View>
@@ -654,58 +726,86 @@ const ProfileScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Current Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter current password"
-                placeholderTextColor={colors.borderDashed}
-                secureTextEntry
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-              />
-            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
+              {[
+                {
+                  key: 'current',
+                  label: 'Current Password',
+                  placeholder: 'Enter current password',
+                  value: currentPassword,
+                  onChangeText: setCurrentPassword,
+                  visible: showCurrentPassword,
+                  onToggle: () => setShowCurrentPassword((prev) => !prev),
+                },
+                {
+                  key: 'new',
+                  label: 'New Password',
+                  placeholder: 'At least 6 characters',
+                  value: newPassword,
+                  onChangeText: setNewPassword,
+                  visible: showNewPassword,
+                  onToggle: () => setShowNewPassword((prev) => !prev),
+                },
+                {
+                  key: 'confirm',
+                  label: 'Confirm New Password',
+                  placeholder: 'Repeat new password',
+                  value: confirmPassword,
+                  onChangeText: setConfirmPassword,
+                  visible: showConfirmPassword,
+                  onToggle: () => setShowConfirmPassword((prev) => !prev),
+                },
+              ].map((field) => (
+                <View key={field.key} style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>{field.label}</Text>
+                  <View style={styles.passwordInputWrap}>
+                    <TextInput
+                      style={[styles.input, styles.passwordInput]}
+                      placeholder={field.placeholder}
+                      placeholderTextColor={colors.borderDashed}
+                      secureTextEntry={!field.visible}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={field.value}
+                      onChangeText={field.onChangeText}
+                    />
+                    <TouchableOpacity
+                      onPress={field.onToggle}
+                      style={styles.eyeToggleBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityLabel={field.visible ? `Hide ${field.label}` : `Show ${field.label}`}
+                    >
+                      <Ionicons
+                        name={field.visible ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>New Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="At least 6 characters"
-                placeholderTextColor={colors.borderDashed}
-                secureTextEntry
-                value={newPassword}
-                onChangeText={setNewPassword}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Confirm New Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Repeat new password"
-                placeholderTextColor={colors.borderDashed}
-                secureTextEntry
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-              />
-            </View>
-
-            <View style={styles.sheetActions}>
-              <TouchableOpacity style={styles.cancelActionBtn} onPress={() => setChangePasswordVisible(false)}>
-                <Text style={styles.cancelActionText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveActionBtn, savingPassword && styles.btnDisabled]}
-                onPress={handleSavePassword}
-                disabled={savingPassword}
-              >
-                {savingPassword ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <Text style={styles.saveActionText}>Update Password</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+              <View style={styles.sheetActions}>
+                <TouchableOpacity style={styles.cancelActionBtn} onPress={() => setChangePasswordVisible(false)}>
+                  <Text style={styles.cancelActionText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveActionBtn, savingPassword && styles.btnDisabled]}
+                  onPress={handleSavePassword}
+                  disabled={savingPassword}
+                >
+                  {savingPassword ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.saveActionText}>Update Password</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1282,6 +1382,7 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     width: '100%',
+    maxHeight: '90%',
     backgroundColor: colors.white,
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
@@ -1350,6 +1451,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyRegular,
     fontSize: fontSizes.md,
     color: colors.textPrimary,
+  },
+  passwordInputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  eyeToggleBtn: {
+    position: 'absolute',
+    right: spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
   },
   hintText: {
     fontFamily: fonts.bodyRegular,

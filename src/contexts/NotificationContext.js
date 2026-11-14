@@ -34,6 +34,8 @@ import {
 import {
   registerForPushNotificationsAsync,
   requestWebPushPermissionAsync,
+  presentLocalNotificationAsync,
+  isLocalNotificationToken,
 } from '../services/notifications';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
@@ -62,6 +64,7 @@ export const NotificationProvider = ({ children }) => {
   // Tracking seen notification IDs to detect newly arrived alerts during polling
   const knownNotificationIds = useRef(new Set());
   const initialLoadDone = useRef(false);
+  const activePushTokenRef = useRef(null);
 
   /**
    * Global helper to trigger the animated in-app notification banner
@@ -146,6 +149,24 @@ export const NotificationProvider = ({ children }) => {
               appointmentId: newest.data?.appointment_id,
             });
 
+            // Native standalone APK fallback: surface a local system tray notification
+            // when remote Expo push isn't active.
+            if (
+              Platform.OS !== 'web' &&
+              (!activePushTokenRef.current || isLocalNotificationToken(activePushTokenRef.current))
+            ) {
+              presentLocalNotificationAsync({
+                title: newest.title || 'Clinic Update',
+                body:
+                  newest.message ||
+                  'You have a new update regarding your pet appointment.',
+                data: {
+                  ...(newest.data || {}),
+                  type: newest.type || 'appointment',
+                },
+              });
+            }
+
             // Gentle haptic feedback
             try {
               Vibration.vibrate(80);
@@ -170,6 +191,7 @@ export const NotificationProvider = ({ children }) => {
     if (!isAuthenticated) {
       knownNotificationIds.current.clear();
       initialLoadDone.current = false;
+      activePushTokenRef.current = null;
       setNotifications([]);
       setUnreadCount(0);
       setBanner((prev) => ({ ...prev, visible: false }));
@@ -214,6 +236,7 @@ export const NotificationProvider = ({ children }) => {
       }
 
       if (token) {
+        activePushTokenRef.current = token;
         await updatePushToken(token);
         console.log('[Push] Successfully registered push token/subscription with backend.');
         return token;

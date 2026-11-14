@@ -323,7 +323,8 @@ const ChatbotScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {/* ── 1. Top bar ─────────────────────────────────────────────────── */}
         <View style={styles.topBar}>
