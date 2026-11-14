@@ -45,7 +45,7 @@ const BRANCH_ADDRESSES = {
   'Batangas City Branch': 'N.F. Almario Building, Kumintang Ilaya',
 };
 
-const EST_DURATION_MIN = 45;
+const EST_DURATION_MIN = 30;
 const GRADIENT_COLORS = ['#4A7C59', '#78A886'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -71,10 +71,12 @@ const formatMinutes = (total) => {
   return `${h12}:${pad(m)} ${suffix}`;
 };
 
-/** '10:00' → '10:00 AM - 10:45 AM (GMT+8)' */
+/** '10:00' → '10:00 AM - 10:30 AM (GMT+8)' (returns pre-formatted AM/PM values directly) */
 const formatTimeRange = (time) => {
-  if (!time) return 'Time TBD';
-  const [h, m] = String(time).split(':').map(Number);
+  const raw = String(time ?? '').trim();
+  if (!raw) return 'Time TBD';
+  if (/(?:am|pm)\s*$/i.test(raw)) return raw;
+  const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
   const start = h * 60 + (m || 0);
   return `${formatMinutes(start)} - ${formatMinutes(start + EST_DURATION_MIN)} (GMT+8)`;
@@ -115,8 +117,12 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
     ? `VB-${String(appointment.id).padStart(6, '0')}`
     : 'VB-000000';
 
+  // Date & Time (with fallbacks from appointment object when route params omit them)
+  const effectiveDateValue = date || appointment?.appointment_date;
+  const effectiveTimeValue = time || appointment?.appointment_time;
+
   // Date (parsed as local time so the weekday never shifts by timezone)
-  const parsedDate = parseLocalDate(date);
+  const parsedDate = parseLocalDate(effectiveDateValue);
   const formattedDate = parsedDate
     ? parsedDate.toLocaleDateString('en-US', {
         weekday: 'long',
@@ -125,6 +131,26 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
         day: 'numeric',
       })
     : 'Date TBD';
+
+  // Status presentation
+  const apptStatus = (appointment?.status || 'pending').toLowerCase();
+  const isApproved = apptStatus === 'approved';
+  const isPending = apptStatus === 'pending';
+  const statusLabel = isApproved
+    ? 'CONFIRMED'
+    : isPending
+      ? 'PENDING APPROVAL'
+      : apptStatus.toUpperCase();
+  const headingText = isApproved
+    ? 'Appointment Confirmed!'
+    : isPending
+      ? 'Appointment Request Submitted!'
+      : 'Appointment Summary';
+  const subtitleText = isPending
+    ? 'Your booking request has been sent to the clinic and is awaiting approval.'
+    : isApproved
+      ? "We've received your booking. A confirmation SMS will be sent shortly."
+      : 'Review your appointment details below.';
 
   // Branch
   const branchName =
@@ -301,10 +327,8 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
         </View>
 
         {/* ── 4. Heading ─────────────────────────────────────────────────── */}
-        <Text style={styles.heading}>Appointment Confirmed!</Text>
-        <Text style={styles.subtitle}>
-          We've received your booking. A confirmation SMS will be sent shortly.
-        </Text>
+        <Text style={styles.heading}>{headingText}</Text>
+        <Text style={styles.subtitle}>{subtitleText}</Text>
 
         {/* ── 5. Summary card ────────────────────────────────────────────── */}
         <View style={styles.card}>
@@ -317,9 +341,11 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
                 <Ionicons name="ticket-outline" size={14} color={colors.textSecondary} />
                 <Text style={styles.refText}>{bookingRef}</Text>
               </View>
-              <View style={styles.statusBadge}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>CONFIRMED</Text>
+              <View style={[styles.statusBadge, isPending && styles.statusBadgePending]}>
+                <View style={[styles.statusDot, isPending && styles.statusDotPending]} />
+                <Text style={[styles.statusText, isPending && styles.statusTextPending]}>
+                  {statusLabel}
+                </Text>
               </View>
             </View>
 
@@ -359,7 +385,7 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
               icon="calendar-outline"
               label="Date & Time"
               value={formattedDate}
-              subValue={formatTimeRange(time)}
+              subValue={formatTimeRange(effectiveTimeValue)}
             />
             <InfoItem
               icon="clipboard-outline"
@@ -377,7 +403,9 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
                 style={styles.smsIcon}
               />
               <Text style={styles.smsText}>
-                You'll receive an SMS confirmation and reminder 2 hours before your appointment.
+                {isPending
+                  ? "You'll receive an SMS acknowledgement shortly, and another SMS once the clinic approves your appointment."
+                  : "You'll receive an SMS confirmation and reminder before your scheduled appointment."}
               </Text>
             </View>
           </View>
@@ -557,17 +585,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.pill,
   },
+  statusBadgePending: {
+    backgroundColor: colors.amberLight,
+  },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.primary,
   },
+  statusDotPending: {
+    backgroundColor: colors.amber,
+  },
   statusText: {
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.xs,
     color: colors.primaryDeep,
     letterSpacing: 0.8,
+  },
+  statusTextPending: {
+    color: colors.amberDark,
   },
 
   // Pet row

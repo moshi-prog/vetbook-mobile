@@ -121,9 +121,12 @@ const formatDate = (value) => {
     : 'Date TBD';
 };
 
-/** '14:30' | '14:30:00' → '2:30 PM' */
+/** '14:30' | '14:30:00' | '2:30 PM' → '2:30 PM' */
 const formatTime = (value) => {
-  const [h, m] = String(value ?? '').split(':').map(Number);
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'Time TBD';
+  if (/(?:am|pm)\s*$/i.test(raw)) return raw;
+  const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
   const suffix = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -137,6 +140,23 @@ const sortKey = (a) =>
 
 /** Status → { bg, text, dot } from the theme (falls back to the neutral 'completed' style). */
 const getStatusColor = (status) => statusColors[normStatus(status)] ?? statusColors.completed;
+
+const extractCancelReason = (notes) => {
+  const raw = String(notes ?? '').trim();
+  if (!raw) return 'Clinic schedule adjustment';
+
+  const adminMatch = /\[Cancelled\][ \t]*([^\r\n]+)/i.exec(raw);
+  if (adminMatch?.[1]?.trim()) {
+    return adminMatch[1].trim();
+  }
+
+  const ownerMatch = /\[Cancelled by Pet Owner\][ \t]*(?:Reason:[ \t]*)?([^\r\n]+)/i.exec(raw);
+  if (ownerMatch?.[1]?.trim()) {
+    return ownerMatch[1].trim();
+  }
+
+  return 'Clinic schedule adjustment';
+};
 
 const DEFAULT_BRANCH_HOURS = {
   weekday_open: '09:00',
@@ -232,6 +252,15 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
             </View>
           )}
         </View>
+
+        {status === 'cancelled' && (
+          <View style={styles.cancelReasonBanner}>
+            <Ionicons name="alert-circle-outline" size={15} color={colors.alertRed} />
+            <Text style={styles.cancelReasonText} numberOfLines={2}>
+              Cancellation Reason: {extractCancelReason(appt.notes)}
+            </Text>
+          </View>
+        )}
 
         {/* Actions */}
         {isUpcoming ? (
@@ -1276,6 +1305,26 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.body + 1,
     color: colors.textTertiary,
+  },
+  cancelReasonBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF0F0',
+    borderWidth: 1,
+    borderColor: 'rgba(220, 53, 69, 0.25)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  cancelReasonText: {
+    flex: 1,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    color: '#C62828',
   },
 
   // Actions

@@ -3,6 +3,7 @@ import {
   Modal,
   View,
   Text,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -71,14 +72,19 @@ const ThemedDialog = ({
               {/* Title & Message */}
               {!!title && <Text style={styles.title}>{title}</Text>}
               {!!message && (
-                <Text
-                  style={[
-                    styles.message,
-                    typeof message === 'string' && message.includes('\n') && styles.messageMultiline,
-                  ]}
+                <ScrollView
+                  style={{ maxHeight: 320, width: '100%', marginBottom: spacing.xl }}
+                  showsVerticalScrollIndicator={false}
                 >
-                  {message}
-                </Text>
+                  <Text
+                    style={[
+                      styles.message,
+                      typeof message === 'string' && message.includes('\n') && styles.messageMultiline,
+                    ]}
+                  >
+                    {message}
+                  </Text>
+                </ScrollView>
               )}
 
               {/* Buttons */}
@@ -159,7 +165,6 @@ const styles = StyleSheet.create({
     color: '#3E433E',
     textAlign: 'center',
     lineHeight: 21,
-    marginBottom: spacing.xl,
     paddingHorizontal: spacing.xs,
   },
   messageMultiline: {

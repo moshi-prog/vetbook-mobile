@@ -260,8 +260,8 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      fetchBranches();
-    }, [fetchBranches])
+      Promise.all([fetchPet(), fetchRecords(), fetchBranches()]);
+    }, [fetchPet, fetchRecords, fetchBranches])
   );
 
   const handleRefresh = useCallback(async () => {

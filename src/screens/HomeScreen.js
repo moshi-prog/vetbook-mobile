@@ -89,10 +89,12 @@ const formatDate = (value) => {
       });
 };
 
-/** Formats '14:30' | '14:30:00' to '2:30 PM'. */
+/** Formats '14:30' | '14:30:00' | '2:30 PM' to '2:30 PM'. */
 const formatTime = (value) => {
-  if (!value) return '';
-  const [h, m] = String(value).split(':').map(Number);
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/(?:am|pm)\s*$/i.test(raw)) return raw;
+  const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return '';
   const suffix = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -152,7 +154,98 @@ const statusStyle = (status) => {
   }
 };
 
-// ─── Branch Data ─────────────────────────────────────────────────────────────
+// ─── Branch Data & Opening Hours Helpers ──────────────────────────────────────
+
+/** Compute current day-of-week (0=Sun..6=Sat) and minutes-from-midnight in Philippine Standard Time (UTC+8). */
+const getPhNow = (now = new Date()) => {
+  const phDate = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return {
+    dayOfWeek: phDate.getUTCDay(),
+    minutes: phDate.getUTCHours() * 60 + phDate.getUTCMinutes(),
+  };
+};
+
+const parseTimeToMinutes = (val) => {
+  if (!val) return null;
+  const m = /(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i.exec(String(val).trim());
+  if (!m) return null;
+  let h = Number(m[1]);
+  const mins = Number(m[2]);
+  const mer = m[3]?.toUpperCase();
+  if (mer === 'PM' && h < 12) h += 12;
+  if (mer === 'AM' && h === 12) h = 0;
+  if (Number.isNaN(h) || Number.isNaN(mins) || h < 0 || h > 23 || mins < 0 || mins > 59) {
+    return null;
+  }
+  return h * 60 + mins;
+};
+
+const extractTimePair = (segment) => {
+  if (!segment || /closed/i.test(segment)) return null;
+  const matches = [...String(segment).matchAll(/(\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)/gi)].map((x) => x[1]);
+  if (matches.length >= 2) {
+    const openMin = parseTimeToMinutes(matches[0]);
+    const closeMin = parseTimeToMinutes(matches[1]);
+    if (openMin !== null && closeMin !== null) return [openMin, closeMin];
+  }
+  return null;
+};
+
+const isBranchOpenAt = (branch, now = new Date()) => {
+  if (!branch) return false;
+  const { dayOfWeek, minutes } = getPhNow(now);
+
+  if (dayOfWeek === 0) {
+    if (branch.sunday_closed) return false;
+    const openMin = parseTimeToMinutes(branch.sunday_open);
+    const closeMin = parseTimeToMinutes(branch.sunday_close);
+    if (openMin !== null && closeMin !== null) {
+      return minutes >= openMin && minutes < closeMin;
+    }
+    if (/closed/i.test(String(branch.hoursSunday || ''))) return false;
+    const pair = extractTimePair(branch.hoursSunday) || [10 * 60, 16 * 60];
+    return minutes >= pair[0] && minutes < pair[1];
+  }
+
+  if (dayOfWeek === 6) {
+    if (branch.saturday_closed) return false;
+    const satOpen = parseTimeToMinutes(branch.saturday_open);
+    const satClose = parseTimeToMinutes(branch.saturday_close);
+    if (satOpen !== null && satClose !== null) {
+      return minutes >= satOpen && minutes < satClose;
+    }
+    const weekdayText = String(branch.hoursWeekday || '');
+    const satSegMatch = /(?:^|\|)\s*Sat[^|]*/i.exec(weekdayText);
+    if (satSegMatch) {
+      if (/closed/i.test(satSegMatch[0])) return false;
+      const satPair = extractTimePair(satSegMatch[0]);
+      if (satPair) return minutes >= satPair[0] && minutes < satPair[1];
+    }
+    const wkOpen = parseTimeToMinutes(branch.weekday_open);
+    const wkClose = parseTimeToMinutes(branch.weekday_close);
+    if (wkOpen !== null && wkClose !== null) {
+      return minutes >= wkOpen && minutes < wkClose;
+    }
+    const fallbackPair = extractTimePair(weekdayText) || [9 * 60, 18 * 60];
+    return minutes >= fallbackPair[0] && minutes < fallbackPair[1];
+  }
+
+  // Weekdays (Mon–Fri)
+  const wkOpen = parseTimeToMinutes(branch.weekday_open);
+  const wkClose = parseTimeToMinutes(branch.weekday_close);
+  if (wkOpen !== null && wkClose !== null) {
+    return minutes >= wkOpen && minutes < wkClose;
+  }
+  const firstSeg = String(branch.hoursWeekday || '').split('|')[0];
+  if (/closed/i.test(firstSeg)) return false;
+  const wkPair = extractTimePair(firstSeg) || [9 * 60, 18 * 60];
+  return minutes >= wkPair[0] && minutes < wkPair[1];
+};
+
+const isClinicOpen = (branchList, now = new Date()) => {
+  const list = Array.isArray(branchList) && branchList.length > 0 ? branchList : DEFAULT_CLINIC_BRANCHES;
+  return list.some((b) => isBranchOpenAt(b, now));
+};
 
 const DEFAULT_CLINIC_BRANCHES = [
   {
@@ -162,6 +255,14 @@ const DEFAULT_CLINIC_BRANCHES = [
     addressSummary: '142 Mabini St., Poblacion, Mabini',
     hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
     hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
+    weekday_open: '09:00',
+    weekday_close: '18:00',
+    saturday_open: '09:00',
+    saturday_close: '18:00',
+    saturday_closed: false,
+    sunday_open: '10:00',
+    sunday_close: '16:00',
+    sunday_closed: false,
     phone: '0917-123-4567',
     dialUrl: 'tel:09171234567',
   },
@@ -172,6 +273,14 @@ const DEFAULT_CLINIC_BRANCHES = [
     addressSummary: 'N.F. Almario Bldg, Kumintang Ilaya',
     hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
     hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
+    weekday_open: '09:00',
+    weekday_close: '18:00',
+    saturday_open: '09:00',
+    saturday_close: '18:00',
+    saturday_closed: false,
+    sunday_open: '10:00',
+    sunday_close: '16:00',
+    sunday_closed: false,
     phone: '0918-765-4321',
     dialUrl: 'tel:09187654321',
   },
@@ -199,6 +308,7 @@ const HomeScreen = ({ navigation }) => {
   const [logoLoadError, setLogoLoadError] = useState(false);
   const [userAvatarError, setUserAvatarError] = useState(false);
   const [failedPetAvatars, setFailedPetAvatars] = useState({});
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -259,17 +369,22 @@ const HomeScreen = ({ navigation }) => {
       }
     });
     fetchBranches();
+    const timer = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(timer);
   }, [fetchBranches]);
 
   // Re-fetch user profile, appointments, notifications, and branch hotlines whenever Home tab is focused
   useFocusEffect(
     useCallback(() => {
+      setNowTick(Date.now());
       refreshUser?.();
       fetchAppointments();
       fetchNotifications();
       fetchBranches();
     }, [refreshUser, fetchAppointments, fetchNotifications, fetchBranches])
   );
+
+  const clinicOpen = isClinicOpen(branches, new Date(nowTick));
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
@@ -675,9 +790,11 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.clinicSubtitle}>{clinic.tagline || 'Compassionate Care for Batangas Pets'}</Text>
                 </View>
               </View>
-              <View style={styles.openBadge}>
-                <View style={styles.openDot} />
-                <Text style={styles.openText}>Open Now</Text>
+              <View style={[styles.openBadge, !clinicOpen && styles.closedBadge]}>
+                <View style={[styles.openDot, !clinicOpen && styles.closedDot]} />
+                <Text style={[styles.openText, !clinicOpen && styles.closedText]}>
+                  {clinicOpen ? 'Open Now' : 'Closed'}
+                </Text>
               </View>
             </View>
 
@@ -1401,16 +1518,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: 9999,
   },
+  closedBadge: {
+    backgroundColor: colors.alertRedLight,
+  },
   openDot: {
     width: 6,
     height: 6,
     borderRadius: 9999,
     backgroundColor: colors.primary,
   },
+  closedDot: {
+    backgroundColor: colors.alertRed,
+  },
   openText: {
     fontFamily: fonts.bodySemiBold,
     fontSize: fontSizes.xs,
     color: colors.primaryDeep,
+  },
+  closedText: {
+    color: colors.alertRedDark,
   },
   clinicDivider: {
     height: 1,

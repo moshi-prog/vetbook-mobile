@@ -1123,35 +1123,37 @@ const ProfileScreen = () => {
             </View>
 
             {/* Branch Options */}
-            <View style={styles.callOptionsList}>
-              {branches.map((b) => (
-                <TouchableOpacity
-                  key={b.id || b.name}
-                  style={styles.callOptionCard}
-                  activeOpacity={0.82}
-                  onPress={() => {
-                    setContactModalVisible(false);
-                    handleDialBranch(b);
-                  }}
-                  accessibilityLabel={`Call ${b.name} at ${b.phone}`}
-                >
-                  <View style={styles.callOptionContent}>
-                    <View style={styles.callOptionTitleRow}>
-                      <Ionicons name="location" size={15} color={colors.primary} />
-                      <Text style={styles.callOptionBranchName}>{b.name}</Text>
+            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.callOptionsList}>
+                {branches.map((b) => (
+                  <TouchableOpacity
+                    key={b.id || b.name}
+                    style={styles.callOptionCard}
+                    activeOpacity={0.82}
+                    onPress={() => {
+                      setContactModalVisible(false);
+                      handleDialBranch(b);
+                    }}
+                    accessibilityLabel={`Call ${b.name} at ${b.phone}`}
+                  >
+                    <View style={styles.callOptionContent}>
+                      <View style={styles.callOptionTitleRow}>
+                        <Ionicons name="location" size={15} color={colors.primary} />
+                        <Text style={styles.callOptionBranchName}>{b.name}</Text>
+                      </View>
+                      <Text style={styles.callOptionAddress}>{b.addressSummary || b.address}</Text>
+                      <View style={styles.callOptionPhoneRow}>
+                        <Ionicons name="call-outline" size={13} color={colors.primary} />
+                        <Text style={styles.callOptionPhoneText}>{b.phone}</Text>
+                      </View>
                     </View>
-                    <Text style={styles.callOptionAddress}>{b.addressSummary || b.address}</Text>
-                    <View style={styles.callOptionPhoneRow}>
-                      <Ionicons name="call-outline" size={13} color={colors.primary} />
-                      <Text style={styles.callOptionPhoneText}>{b.phone}</Text>
+                    <View style={styles.callDialIconWrap}>
+                      <Ionicons name="call" size={16} color={colors.white} />
                     </View>
-                  </View>
-                  <View style={styles.callDialIconWrap}>
-                    <Ionicons name="call" size={16} color={colors.white} />
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             {/* Emergency note */}
             <View style={styles.callModalNoteRow}>

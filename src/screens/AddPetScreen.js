@@ -206,13 +206,19 @@ const AddPetScreen = ({ navigation, route }) => {
   const handleSave = async () => {
     if (!validate()) return;
 
+    const finalWeight = weight
+      ? (weightUnit === 'lb' ? Number((parseFloat(weight) * 0.45359237).toFixed(2)) : parseFloat(weight))
+      : null;
+
     const payload = {
       name: name.trim(),
       species,
       breed: breed.trim() || null,
       age: age ? parseInt(age, 10) : null,
       gender,
-      weight: weight ? parseFloat(weight) : null,
+      weight: finalWeight,
+      spayed_neutered: Boolean(spayedNeutered),
+      microchip_id: microchipId.trim() || null,
       medical_conditions: (medicalConditions + (allergies.length ? " Allergies: " + allergies.join(", ") : "")).trim() || null,
       avatar: avatarUrl || null,
       avatar_url: avatarUrl || null,
