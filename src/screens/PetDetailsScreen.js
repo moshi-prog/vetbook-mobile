@@ -49,6 +49,7 @@ import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
+import { getPetHealthStatus } from '../utils/petStatus';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -395,10 +396,11 @@ const PetDetailsScreen = ({ route, navigation }) => {
   }
 
   // ── Derived values ─────────────────────────────────────────────────────────
-  const accent      = speciesColor(pet.species);
-  const allergies   = parseAllergies(pet.medical_conditions);
-  const microchipId = pet.microchip_id || pet.microchipId || null;
-  const vaccines    = deriveVaccinations(records);
+  const accent       = speciesColor(pet.species);
+  const allergies    = parseAllergies(pet.medical_conditions);
+  const microchipId  = pet.microchip_id || pet.microchipId || null;
+  const vaccines     = deriveVaccinations(records);
+  const healthStatus = getPetHealthStatus(pet);
 
   const metaLine = [
     pet.species,
@@ -775,9 +777,17 @@ const PetDetailsScreen = ({ route, navigation }) => {
             </View>
             <Text style={styles.heroMeta}>{metaLine || '—'}</Text>
 
-            <View style={styles.memberBadge}>
-              <Ionicons name="ribbon-outline" size={12} color={colors.amberDark} />
-              <Text style={styles.memberBadgeText}>Gold Care Member</Text>
+            <View style={styles.heroBadgeRow}>
+              <View style={styles.memberBadge}>
+                <Ionicons name="ribbon-outline" size={12} color={colors.amberDark} />
+                <Text style={styles.memberBadgeText}>Gold Care Member</Text>
+              </View>
+              <View style={[styles.healthStatusBadge, { backgroundColor: healthStatus.bg }]}>
+                <Ionicons name={healthStatus.icon} size={12} color={healthStatus.text} />
+                <Text style={[styles.healthStatusText, { color: healthStatus.text }]}>
+                  {healthStatus.label}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.infoPillRow}>
@@ -1315,6 +1325,12 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: colors.textSecondary,
   },
+  heroBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+  },
   memberBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1329,6 +1345,19 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.xs,
     color: colors.amberDark,
+  },
+  healthStatusBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+  },
+  healthStatusText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
   },
   infoPillRow: {
     flexDirection: 'row',

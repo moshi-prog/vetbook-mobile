@@ -40,6 +40,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { getPetHealthStatus } from '../utils/petStatus';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -62,15 +63,6 @@ const speciesDotColor = (species = '') => {
   if (s === 'bird') return '#78A886';
   if (s === 'rabbit') return '#B83230';
   return '#6B6358';
-};
-
-/** Derives health status badge from pet data. */
-const petStatus = (pet) => {
-  const conds = (pet.medical_conditions ?? '').trim();
-  const hasIssue = conds.length > 0;
-  return hasIssue
-    ? { label: 'Attention', bg: colors.amberLight, text: colors.amberDark }
-    : { label: 'Healthy', bg: colors.primaryPale, text: colors.primaryDeep };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,7 +187,7 @@ const MyPetsScreen = ({ navigation }) => {
   /** Single pet card row */
   const renderPetCard = ({ item: pet }) => {
     const dotColor = speciesDotColor(pet.species);
-    const status = petStatus(pet);
+    const status = getPetHealthStatus(pet, { compact: true });
     const initials = (pet.name ?? '?').charAt(0).toUpperCase();
 
     return (
