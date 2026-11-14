@@ -42,6 +42,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,7 +50,8 @@ import api, { getBranches } from '../services/api';
 import { getClinicInfo, saveClinicInfo } from '../services/storage';
 import TermsModal from '../components/TermsModal';
 
-// ─── Validation helpers ───────────────────────────────────────────────────────
+// ─── Constants & Validation helpers ───────────────────────────────────────────
+const REMEMBER_EMAIL_KEY = 'vetbook_remembered_email';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +65,7 @@ const LoginScreen = ({ navigation }) => {
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -81,6 +84,21 @@ const LoginScreen = ({ navigation }) => {
   // ── Dynamic clinic branding ────────────────────────────────────────────────
   const [clinic, setClinic] = useState(null);
   const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(REMEMBER_EMAIL_KEY)
+      .then((savedEmail) => {
+        if (isMounted && savedEmail) {
+          setEmail(savedEmail);
+          setRememberMe(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -141,9 +159,19 @@ const LoginScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const result = await login(email.trim().toLowerCase(), password);
+      const trimmedEmail = email.trim().toLowerCase();
+      const result = await login(trimmedEmail, password);
 
       if (result.success) {
+        try {
+          if (rememberMe) {
+            await AsyncStorage.setItem(REMEMBER_EMAIL_KEY, trimmedEmail);
+          } else {
+            await AsyncStorage.removeItem(REMEMBER_EMAIL_KEY);
+          }
+        } catch {
+          // Storage failure should not prevent login transition
+        }
         // AuthContext state change automatically swaps to the authenticated stack
         return;
       } else if (result.needsVerification) {
@@ -212,6 +240,24 @@ const LoginScreen = ({ navigation }) => {
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* — Design A: Scattered Paws & Doodles Background — */}
+      <View
+        style={styles.bgDecorations}
+        pointerEvents="none"
+        accessibilityElementsHidden={true}
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Ionicons name="paw" size={64} color={colors.primary} style={styles.pawTopLeft} />
+        <Ionicons name="sparkles" size={22} color={colors.primary} style={styles.sparkleTopLeft} />
+        <Ionicons name="paw" size={56} color={colors.primary} style={styles.pawTopRight} />
+        <Ionicons name="heart-outline" size={24} color={colors.primary} style={styles.heartTopRight} />
+        <Text style={styles.whiskerLeft}>≈</Text>
+        <Text style={styles.whiskerRight}>≈</Text>
+        <Ionicons name="paw" size={72} color={colors.primary} style={styles.pawBottomLeft} />
+        <Ionicons name="paw" size={60} color={colors.primary} style={styles.pawBottomRight} />
+        <Ionicons name="paw-outline" size={40} color={colors.primary} style={styles.pawBottomRightOutline} />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -340,14 +386,31 @@ const LoginScreen = ({ navigation }) => {
               {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
             </View>
 
-            {/* — Forgot password? link (right-aligned) — */}
-            <TouchableOpacity
-              style={styles.forgotWrapper}
-              onPress={handleForgotPassword}
-              accessibilityRole="link"
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </TouchableOpacity>
+            {/* — Remember me & Forgot password? row — */}
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={styles.rememberBtn}
+                onPress={() => setRememberMe((prev) => !prev)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={rememberMe ? 'checkbox' : 'square-outline'}
+                  size={18}
+                  color={rememberMe ? colors.primary : colors.textSecondary}
+                />
+                <Text style={styles.rememberText}>Remember me</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                accessibilityRole="link"
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* — General error message (from backend) — */}
             {!!errorMessage && (
@@ -564,6 +627,78 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  // ── Scattered Paws & Doodles Background (Design A) ────────────────────────
+  bgDecorations: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  pawTopLeft: {
+    position: 'absolute',
+    top: 76,
+    left: -12,
+    opacity: 0.08,
+    transform: [{ rotate: '-24deg' }],
+  },
+  sparkleTopLeft: {
+    position: 'absolute',
+    top: 152,
+    left: 28,
+    opacity: 0.14,
+    transform: [{ rotate: '12deg' }],
+  },
+  pawTopRight: {
+    position: 'absolute',
+    top: 96,
+    right: -10,
+    opacity: 0.07,
+    transform: [{ rotate: '28deg' }],
+  },
+  heartTopRight: {
+    position: 'absolute',
+    top: 168,
+    right: 32,
+    opacity: 0.11,
+    transform: [{ rotate: '-14deg' }],
+  },
+  whiskerLeft: {
+    position: 'absolute',
+    top: '44%',
+    left: 10,
+    fontSize: 32,
+    color: colors.primary,
+    opacity: 0.1,
+    transform: [{ rotate: '-12deg' }],
+  },
+  whiskerRight: {
+    position: 'absolute',
+    top: '48%',
+    right: 10,
+    fontSize: 32,
+    color: colors.primary,
+    opacity: 0.1,
+    transform: [{ rotate: '12deg' }],
+  },
+  pawBottomLeft: {
+    position: 'absolute',
+    bottom: 48,
+    left: -16,
+    opacity: 0.07,
+    transform: [{ rotate: '20deg' }],
+  },
+  pawBottomRight: {
+    position: 'absolute',
+    bottom: 64,
+    right: -8,
+    opacity: 0.08,
+    transform: [{ rotate: '-28deg' }],
+  },
+  pawBottomRightOutline: {
+    position: 'absolute',
+    bottom: 132,
+    right: 24,
+    opacity: 0.09,
+    transform: [{ rotate: '15deg' }],
+  },
 
   // ── Top App Bar (72 px) ───────────────────────────────────────────────────
   appBar: {
@@ -668,7 +803,11 @@ const styles = StyleSheet.create({
 
   // ── Form Card ────────────────────────────────────────────────────────────
   formCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } : {}),
     borderRadius: radii.xl,               // 24 px
     padding: spacing.xl,                  // 24 px
     borderWidth: 1,
@@ -727,11 +866,23 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
 
-  // ── Forgot password ───────────────────────────────────────────────────────
-  forgotWrapper: {
-    alignSelf: 'flex-end',
-    marginBottom: spacing.lg,
-    marginTop: -spacing.xs,
+  // ── Remember me & Forgot password ─────────────────────────────────────────
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+  },
+  rememberBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: 2,
+  },
+  rememberText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,              // 11 px
+    color: colors.textSecondary,
   },
   forgotText: {
     fontFamily: fonts.bodySemiBold,
