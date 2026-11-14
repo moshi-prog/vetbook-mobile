@@ -267,8 +267,29 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [reschedulingAppt, setReschedulingAppt] = useState(null);
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState('');
   const [selectedRescheduleTime, setSelectedRescheduleTime] = useState('');
+  const [reschedBookedSlots, setReschedBookedSlots] = useState([]);
   const [submittingReschedule, setSubmittingReschedule] = useState(false);
   const availableDays = getNextDays(14);
+
+  // Fetch already-booked slots whenever reschedule appointment or date changes
+  React.useEffect(() => {
+    if (!reschedulingAppt?.branch || !selectedRescheduleDate) {
+      setReschedBookedSlots([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getBookedSlots(reschedulingAppt.branch, selectedRescheduleDate);
+        if (!cancelled) {
+          setReschedBookedSlots(res.data?.booked_slots || []);
+        }
+      } catch {
+        if (!cancelled) setReschedBookedSlots([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [reschedulingAppt, selectedRescheduleDate]);
 
   // Dynamic Time Slots based on appointment branch operating hours
   const reschedBranchObj = React.useMemo(() => {
@@ -293,12 +314,35 @@ const MyAppointmentsScreen = ({ navigation }) => {
     return generateTimeSlots(reschedBranchObj, selectedRescheduleDate);
   }, [reschedBranchObj, selectedRescheduleDate]);
 
-  // Ensure selectedRescheduleTime is valid whenever reschedSlots changes
+  const originalReschedDate = reschedulingAppt?.appointment_date
+    ? reschedulingAppt.appointment_date.split('T')[0]
+    : '';
+  const originalReschedTime = reschedulingAppt?.appointment_time
+    ? reschedulingAppt.appointment_time.slice(0, 5)
+    : '';
+
+  const isReschedSlotBooked = React.useCallback(
+    (slot) =>
+      reschedBookedSlots.includes(slot) &&
+      !(selectedRescheduleDate === originalReschedDate && slot === originalReschedTime),
+    [reschedBookedSlots, selectedRescheduleDate, originalReschedDate, originalReschedTime]
+  );
+
+  // Ensure selectedRescheduleTime is valid and not taken by another appointment
   React.useEffect(() => {
-    if (reschedSlots.length > 0 && !reschedSlots.includes(selectedRescheduleTime)) {
-      setSelectedRescheduleTime(reschedSlots[0]);
+    if (reschedSlots.length === 0) {
+      setSelectedRescheduleTime('');
+      return;
     }
-  }, [reschedSlots]);
+    const currentValid =
+      selectedRescheduleTime &&
+      reschedSlots.includes(selectedRescheduleTime) &&
+      !isReschedSlotBooked(selectedRescheduleTime);
+    if (!currentValid) {
+      const firstOpen = reschedSlots.find((s) => !isReschedSlotBooked(s)) || '';
+      setSelectedRescheduleTime(firstOpen);
+    }
+  }, [reschedSlots, selectedRescheduleTime, isReschedSlotBooked]);
 
   // Cancellation reason state
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
@@ -487,6 +531,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
     } else {
       setSelectedRescheduleTime(slots[0] || '');
     }
+    setReschedBookedSlots([]);
     setRescheduleModalVisible(true);
   };
 
@@ -795,15 +840,30 @@ const MyAppointmentsScreen = ({ navigation }) => {
               ) : (
                 <View style={styles.timeGrid}>
                   {reschedSlots.map((slot) => {
-                    const isSel = selectedRescheduleTime === slot;
+                    const booked = isReschedSlotBooked(slot);
+                    const isSel = selectedRescheduleTime === slot && !booked;
                     return (
                       <TouchableOpacity
                         key={slot}
-                        style={[styles.timeSlot, isSel && styles.timeSlotActive]}
+                        style={[
+                          styles.timeSlot,
+                          isSel && styles.timeSlotActive,
+                          booked && styles.timeSlotDisabled,
+                        ]}
                         onPress={() => setSelectedRescheduleTime(slot)}
+                        disabled={booked}
                         activeOpacity={0.8}
+                        accessibilityLabel={`${slot}${booked ? ', booked' : ''}`}
                       >
-                        <Text style={[styles.timeSlotText, isSel && styles.timeSlotTextActive]}>{slot}</Text>
+                        <Text
+                          style={[
+                            styles.timeSlotText,
+                            isSel && styles.timeSlotTextActive,
+                            booked && styles.timeSlotTextDisabled,
+                          ]}
+                        >
+                          {slot}
+                        </Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -820,9 +880,12 @@ const MyAppointmentsScreen = ({ navigation }) => {
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalSaveBtn, submittingReschedule && { opacity: 0.7 }]}
+                style={[
+                  styles.modalSaveBtn,
+                  (submittingReschedule || !selectedRescheduleTime) && { opacity: 0.7 },
+                ]}
                 onPress={handleConfirmReschedule}
-                disabled={submittingReschedule}
+                disabled={submittingReschedule || !selectedRescheduleTime}
               >
                 {submittingReschedule ? (
                   <ActivityIndicator size="small" color={colors.white} />
@@ -1388,6 +1451,14 @@ const styles = StyleSheet.create({
   },
   timeSlotTextActive: {
     color: colors.white,
+  },
+  timeSlotDisabled: {
+    opacity: 0.45,
+    backgroundColor: colors.cardWarm || '#F5F2EB',
+  },
+  timeSlotTextDisabled: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
   },
   closedCard: {
     backgroundColor: '#FFF0F0',

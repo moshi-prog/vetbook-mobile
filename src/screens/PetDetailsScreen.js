@@ -302,7 +302,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   const handleSuccessClose = () => {
     setSuccessDialogVisible(false);
-    navigation.navigate('Pets', { refresh: true });
+    navigation.navigate('MainTabs', { screen: 'Pets', params: { refresh: true } });
   };
 
   const handlePickAndUploadAvatar = async () => {

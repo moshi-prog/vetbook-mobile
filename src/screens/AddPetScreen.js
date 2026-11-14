@@ -221,24 +221,9 @@ const AddPetScreen = ({ navigation, route }) => {
     try {
       if (isEditMode) {
         await api.updatePet(petId, payload);
-        if (avatarUrl && !avatarUrl.startsWith('http')) {
-          try {
-            await api.uploadPetAvatar(petId, avatarUrl);
-          } catch (uploadErr) {
-            console.warn('Avatar upload warning on update:', uploadErr);
-          }
-        }
         navigation.goBack();
       } else {
-        const res = await api.createPet(payload);
-        const newPet = res.data?.pet;
-        if (newPet?.id && avatarUrl && !avatarUrl.startsWith('http')) {
-          try {
-            await api.uploadPetAvatar(newPet.id, avatarUrl);
-          } catch (uploadErr) {
-            console.warn('Avatar upload warning on create:', uploadErr);
-          }
-        }
+        await api.createPet(payload);
         // Navigate back after successful creation
         if (navigation.canGoBack()) {
           navigation.goBack();
@@ -282,7 +267,7 @@ const AddPetScreen = ({ navigation, route }) => {
 
   const handleSuccessClose = () => {
     setSuccessDialogVisible(false);
-    navigation.navigate('Pets', { refresh: true });
+    navigation.navigate('MainTabs', { screen: 'Pets', params: { refresh: true } });
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────

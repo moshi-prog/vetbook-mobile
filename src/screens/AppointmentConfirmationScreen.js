@@ -169,7 +169,31 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   const handleAddToCalendar = () => {
     const title = encodeURIComponent(`Vet Appointment for ${petName}`);
     const loc = encodeURIComponent(branchName || 'VetBook Animal Clinic');
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}`;
+    const details = encodeURIComponent(
+      `Appointment for ${petName}. Reason: ${reasonText || 'General Visit'}. Managed via VetBook.`
+    );
+
+    const rawTime = time || appointment?.appointment_time;
+    let datesParam = '';
+    if (parsedDate && rawTime) {
+      const [h, m] = String(rawTime).split(':').map(Number);
+      if (!Number.isNaN(h) && !Number.isNaN(m)) {
+        const startDate = new Date(
+          parsedDate.getFullYear(),
+          parsedDate.getMonth(),
+          parsedDate.getDate(),
+          h,
+          m,
+          0
+        );
+        const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+        const fmtCal = (d) =>
+          `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+        datesParam = `&dates=${fmtCal(startDate)}/${fmtCal(endDate)}`;
+      }
+    }
+
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}&details=${details}${datesParam}`;
     Linking.openURL(url).catch(() => Alert.alert('Notice', 'Could not open calendar app.'));
   };
 
