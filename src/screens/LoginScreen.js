@@ -189,7 +189,6 @@ const LoginScreen = ({ navigation }) => {
       } else {
         const msg = result.error || 'Invalid email or password.';
         setErrorMessage(msg);
-        Alert.alert('Login Failed', msg);
       }
     } catch (err) {
       const msg = err.message || 'An unexpected error occurred.';

@@ -19,7 +19,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -135,6 +136,11 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   const petSpecies = pet?.species ?? appointment?.pet?.species;
   const petAge = pet?.age ?? appointment?.pet?.age;
   const petAvatar = pet?.avatar_url ?? appointment?.pet?.avatar_url;
+  const [petAvatarError, setPetAvatarError] = useState(false);
+
+  useEffect(() => {
+    setPetAvatarError(false);
+  }, [petAvatar]);
   const ageLabel =
     petAge !== undefined && petAge !== null && petAge !== ''
       ? `${petAge} ${Number(petAge) === 1 ? 'yr' : 'yrs'}`
@@ -161,7 +167,10 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   };
 
   const handleAddToCalendar = () => {
-    Alert.alert('Add to Calendar', 'Calendar sync coming soon');
+    const title = encodeURIComponent(`Vet Appointment for ${petName}`);
+    const loc = encodeURIComponent(branchName || 'VetBook Animal Clinic');
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}`;
+    Linking.openURL(url).catch(() => Alert.alert('Notice', 'Could not open calendar app.'));
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -189,12 +198,12 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
           <Text style={styles.wordmark}>VetBook</Text>
 
           <TouchableOpacity
-            onPress={() => Alert.alert('Notifications', 'Coming soon!')}
+            onPress={handleBackHome}
             style={styles.brandIconBtn}
-            accessibilityLabel="Notifications"
+            accessibilityLabel="Return home"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="notifications-outline" size={22} color={colors.primary} />
+            <Ionicons name="home-outline" size={22} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -234,8 +243,12 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
 
             {/* Pet info row */}
             <View style={styles.petRow}>
-              {petAvatar ? (
-                <Image source={{ uri: petAvatar }} style={styles.petAvatar} />
+              {petAvatar && !petAvatarError ? (
+                <Image
+                  source={{ uri: petAvatar }}
+                  style={styles.petAvatar}
+                  onError={() => setPetAvatarError(true)}
+                />
               ) : (
                 <View style={[styles.petAvatar, styles.petAvatarFallback]}>
                   <Ionicons name="paw" size={24} color={colors.primary} />

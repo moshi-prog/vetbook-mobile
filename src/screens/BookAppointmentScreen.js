@@ -46,14 +46,13 @@ import { generateTimeSlots } from '../utils/timeSlots';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BRANCHES = [
+const DEFAULT_BRANCHES = [
   {
     id: 'mabini',
     name: 'Mabini Branch',
     address: '142 Mabini St., Poblacion',
-    badge: null,
-    footer: 'Open now',
-    open: true,
+    hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
+    hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
     weekday_open: '09:00',
     weekday_close: '18:00',
     saturday_open: '09:00',
@@ -67,8 +66,8 @@ const BRANCHES = [
     id: 'batangas_city',
     name: 'Batangas City Branch',
     address: 'N.F. Almario Building, Kumintang Ilaya',
-    footer: 'Opens at 9:00 AM',
-    open: false,
+    hoursWeekday: 'Mon–Sat: 9:00 AM – 6:00 PM',
+    hoursSunday: 'Sun: 10:00 AM – 4:00 PM',
     weekday_open: '09:00',
     weekday_close: '18:00',
     saturday_open: '09:00',
@@ -79,9 +78,6 @@ const BRANCHES = [
     sunday_closed: false,
   },
 ];
-
-// Example of an already-booked slot (2:30 PM)
-const BOOKED_SLOTS = ['14:30'];
 
 const REASONS = ['Checkup', 'Vaccination', 'Grooming', 'Deworming', 'Emergency'];
 
@@ -147,13 +143,88 @@ const generateDates = (count, branch) => {
 const extractList = (data, key) =>
   Array.isArray(data?.[key]) ? data[key] : Array.isArray(data) ? data : [];
 
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+};
+
+/** Calculate whether a branch is open now in Philippine Standard Time (Asia/Manila, UTC+8). */
+const isBranchOpenNow = (branch, nowUtcMs = Date.now()) => {
+  const pht = new Date(nowUtcMs + 8 * 60 * 60 * 1000);
+  const day = pht.getUTCDay(); // 0 = Sunday, 6 = Saturday
+  const currentMins = pht.getUTCHours() * 60 + pht.getUTCMinutes();
+
+  let openStr;
+  let closeStr;
+  if (day === 0) {
+    if (branch?.sunday_closed) return false;
+    openStr = branch?.sunday_open;
+    closeStr = branch?.sunday_close;
+  } else if (day === 6) {
+    if (branch?.saturday_closed) return false;
+    openStr = branch?.saturday_open || branch?.weekday_open;
+    closeStr = branch?.saturday_close || branch?.weekday_close;
+  } else {
+    openStr = branch?.weekday_open;
+    closeStr = branch?.weekday_close;
+  }
+
+  const openMins = parseTimeToMinutes(openStr);
+  const closeMins = parseTimeToMinutes(closeStr);
+  if (openMins === null || closeMins === null) return false;
+
+  return currentMins >= openMins && currentMins < closeMins;
+};
+
+const buildBranchCard = (b, nowUtcMs = Date.now()) => {
+  const normalized = {
+    id: b.id,
+    name: b.name,
+    address: b.addressSummary || b.address,
+    badge: b.badge ?? null,
+    hoursWeekday: b.hoursWeekday || 'Mon–Sat: 9:00 AM – 6:00 PM',
+    hoursSunday: b.hoursSunday || 'Sun: 10:00 AM – 4:00 PM',
+    weekday_open: b.weekday_open || '09:00',
+    weekday_close: b.weekday_close || '18:00',
+    saturday_open: b.saturday_open || b.weekday_open || '09:00',
+    saturday_close: b.saturday_close || b.weekday_close || '18:00',
+    saturday_closed: !!b.saturday_closed,
+    sunday_open: b.sunday_open || '10:00',
+    sunday_close: b.sunday_close || '16:00',
+    sunday_closed: !!b.sunday_closed,
+  };
+  const open = isBranchOpenNow(normalized, nowUtcMs);
+  const phtDay = new Date(nowUtcMs + 8 * 60 * 60 * 1000).getUTCDay();
+  const scheduleLabel = phtDay === 0 ? normalized.hoursSunday : normalized.hoursWeekday;
+
+  return {
+    ...normalized,
+    open,
+    footer: `${open ? 'Open now' : 'Closed'} • ${scheduleLabel}`,
+  };
+};
+
 // ─── Small presentational pieces ─────────────────────────────────────────────
 
 const PetAvatar = ({ pet, size }) => {
   const accent = speciesColor(pet?.species);
   const dim = { width: size, height: size, borderRadius: size / 2 };
-  if (pet?.avatar_url) {
-    return <Image source={{ uri: pet.avatar_url }} style={[dim, { backgroundColor: colors.cardWarm }]} />;
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [pet?.avatar_url]);
+
+  if (pet?.avatar_url && !imgError) {
+    return (
+      <Image
+        source={{ uri: pet.avatar_url }}
+        style={[dim, { backgroundColor: colors.cardWarm }]}
+        onError={() => setImgError(true)}
+      />
+    );
   }
   return (
     <View style={[dim, styles.avatarFallback, { backgroundColor: accent + '22', borderColor: accent + '44' }]}>
@@ -179,12 +250,14 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [pets, setPets]                     = useState([]);
-  const [branches, setBranches]             = useState(BRANCHES);
+  const [branches, setBranches]             = useState(() => DEFAULT_BRANCHES.map((b) => buildBranchCard(b)));
   const [selectedPetId, setSelectedPetId]   = useState(preselectedPetId || null);
   const [selectedPet, setSelectedPet]       = useState(preselectedPet || null);
   const [selectedBranch, setSelectedBranch] = useState('Mabini Branch');
   const [selectedDate, setSelectedDate]     = useState(null);
   const [selectedTime, setSelectedTime]     = useState(null);
+  const [bookedSlots, setBookedSlots]       = useState([]);
+  const [fetchingSlots, setFetchingSlots]   = useState(false);
   const [reason, setReason]                 = useState('Checkup');
   const [notes, setNotes]                   = useState('');
   const [loading, setLoading]               = useState(false);
@@ -204,23 +277,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
         if (cancelled) return;
         const branchList = res?.data?.data || res?.data || [];
         if (Array.isArray(branchList) && branchList.length > 0) {
-          const merged = branchList.map((b) => ({
-            id: b.id,
-            name: b.name,
-            address: b.addressSummary || b.address,
-            badge: null,
-            footer: b.hoursWeekday || 'Open now',
-            open: true,
-            weekday_open: b.weekday_open || '09:00',
-            weekday_close: b.weekday_close || '18:00',
-            saturday_open: b.saturday_open || b.weekday_open || '09:00',
-            saturday_close: b.saturday_close || b.weekday_close || '18:00',
-            saturday_closed: !!b.saturday_closed,
-            sunday_open: b.sunday_open || '10:00',
-            sunday_close: b.sunday_close || '16:00',
-            sunday_closed: !!b.sunday_closed,
-          }));
-          setBranches(merged);
+          setBranches(branchList.map((b) => buildBranchCard(b)));
         }
       } catch (err) {
         // Fallback to initial BRANCHES
@@ -270,12 +327,36 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     return generateTimeSlots(branchObj, selectedDate);
   }, [branchObj, selectedDate]);
 
-  // Reset selectedTime if it becomes invalid under new operating hours
+  // ── Fetch live booked slots when branch or date changes ────────────────────
   useEffect(() => {
-    if (selectedTime && !availableSlots.includes(selectedTime)) {
+    if (!selectedBranch || !selectedDate) {
+      setBookedSlots([]);
+      return;
+    }
+    let cancelled = false;
+    setFetchingSlots(true);
+    (async () => {
+      try {
+        const dateStr = toDateString(selectedDate);
+        const res = await api.getBookedSlots(selectedBranch, dateStr);
+        if (!cancelled) {
+          setBookedSlots(res.data?.booked_slots || []);
+        }
+      } catch (err) {
+        if (!cancelled) setBookedSlots([]);
+      } finally {
+        if (!cancelled) setFetchingSlots(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedBranch, selectedDate]);
+
+  // Reset selectedTime if it becomes invalid under new operating hours or booked slots
+  useEffect(() => {
+    if (selectedTime && (!availableSlots.includes(selectedTime) || bookedSlots.includes(selectedTime))) {
       setSelectedTime(null);
     }
-  }, [availableSlots, selectedTime]);
+  }, [availableSlots, bookedSlots, selectedTime]);
 
   // Progress: first incomplete step is the "current" one
   const currentStep = !selectedPetId ? 1 : !selectedDate ? 2 : !selectedTime ? 3 : 4;
@@ -608,7 +689,10 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
           {/* ── 6. Choose Time ────────────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionHeading title="Choose Time" />
+            <SectionHeading
+              title="Choose Time"
+              right={fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+            />
             {isClinicClosed ? (
               <View style={styles.closedCard}>
                 <Ionicons name="calendar-outline" size={24} color="#BA1A1A" />
@@ -628,7 +712,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             ) : (
               <View style={styles.timeGrid}>
                 {availableSlots.map((slot) => {
-                  const booked = BOOKED_SLOTS.includes(slot);
+                  const booked = bookedSlots.includes(slot);
                   const past = isSlotPast(slot);
                   const disabled = booked || past;
                   const isSelected = selectedTime === slot && !disabled;
@@ -1006,6 +1090,7 @@ const styles = StyleSheet.create({
   dotOpen: { backgroundColor: colors.primary },
   dotClosed: { backgroundColor: colors.borderDashed },
   branchFooterText: {
+    flexShrink: 1,
     fontFamily: fonts.bodySemiBold,
     fontSize: fontSizes.sm,
     color: colors.textMuted,

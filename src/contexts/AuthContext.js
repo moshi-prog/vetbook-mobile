@@ -227,9 +227,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserState = async (updatedFields) => {
+    if (!updatedFields) return;
     setUser((prev) => {
-      const fieldsToMerge = updatedFields?.user ? updatedFields.user : updatedFields;
-      const next = { ...prev, ...fieldsToMerge };
+      const incoming = updatedFields?.user ? updatedFields.user : updatedFields;
+      const next = { ...prev, ...incoming };
+      if (!incoming?.avatar_url && prev?.avatar_url) {
+        next.avatar_url = prev.avatar_url;
+      }
       storage.saveUser(next);
       return next;
     });

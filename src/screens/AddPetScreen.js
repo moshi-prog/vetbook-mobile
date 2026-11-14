@@ -17,7 +17,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -95,7 +95,12 @@ const AddPetScreen = ({ navigation, route }) => {
   const [microchipId, setMicrochipId]       = useState(initial.microchip_id || '');
   // Keep any existing photo so saving an edit doesn't wipe avatar_url
   const [avatarUrl, setAvatarUrl]           = useState(initial.avatar_url || null);
+  const [avatarError, setAvatarError]       = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [avatarUrl]);
   const [loading, setLoading]               = useState(false);
   const [errors, setErrors]                 = useState({});
 
@@ -128,9 +133,14 @@ const AddPetScreen = ({ navigation, route }) => {
 
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
         const pickedAsset = result.assets[0];
+        const mimeType =
+          pickedAsset.mimeType && pickedAsset.mimeType.startsWith('image/')
+            ? pickedAsset.mimeType
+            : 'image/jpeg';
         const pickedUri = pickedAsset.base64
-          ? `data:image/jpeg;base64,${pickedAsset.base64}`
+          ? `data:${mimeType};base64,${pickedAsset.base64}`
           : pickedAsset.uri;
+        setAvatarError(false);
         setAvatarUrl(pickedUri);
 
         // If editing an existing pet, upload right away
@@ -347,8 +357,12 @@ const AddPetScreen = ({ navigation, route }) => {
             >
               {uploadingPhoto ? (
                 <ActivityIndicator size="small" color={colors.primary} />
-              ) : avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.photoImage} />
+              ) : avatarUrl && !avatarError ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.photoImage}
+                  onError={() => setAvatarError(true)}
+                />
               ) : (
                 <Ionicons name="camera-outline" size={32} color={colors.primaryLight} />
               )}

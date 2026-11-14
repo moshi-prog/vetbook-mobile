@@ -36,6 +36,7 @@ import {
   RefreshControl,
   Modal,
   Linking,
+  Share,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -116,15 +117,22 @@ const extractList = (data, keys) => {
 };
 
 /**
- * Up-to-date  : administered < 335 days ago
- * Due soon    : 335–365 days ago (annual booster approaching)
- * Overdue     : > 365 days ago
+ * Up-to-date      : administered < 335 days ago
+ * Due soon        : 335–365 days ago (annual booster approaching)
+ * Overdue         : > 365 days ago
+ * Date unverified : missing or invalid consultation date
  */
 const vaccineStatus = (dateValue) => {
-  const d = new Date(dateValue);
-  if (isNaN(d.getTime())) {
-    return { label: 'Up to date', bg: colors.primaryPale, text: colors.primaryDeep, icon: colors.primary };
+  const d = dateValue ? new Date(dateValue) : null;
+  if (!d || isNaN(d.getTime())) {
+    return {
+      label: 'Date unverified',
+      bg: colors.cardWarm || '#F3EFE6',
+      text: colors.textSecondary || '#6F7368',
+      icon: colors.borderDashed || '#C4C8BC',
+    };
   }
+
   const days = (Date.now() - d.getTime()) / DAY_MS;
   if (days > 365) {
     return { label: 'Overdue', bg: colors.alertRedLight, text: colors.alertRedDark, icon: colors.alertRed };
@@ -166,6 +174,11 @@ const PetDetailsScreen = ({ route, navigation }) => {
   const [loading, setLoading]               = useState(!initialPet);
   const [refreshing, setRefreshing]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError]       = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [pet?.avatar_url]);
   const [activeTab, setActiveTab]           = useState('Overview');
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [consultationModalVisible, setConsultationModalVisible] = useState(false);
@@ -258,7 +271,14 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const handleEdit = () => navigation.navigate('AddPet', { petId, pet });
-  const handleShare = () => Alert.alert('Share', 'Sharing coming soon');
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: `${pet?.name || 'Pet'}'s Medical Profile`,
+        message: `VetBook Health Record: ${pet?.name || 'Pet'} (${pet?.species || 'Pet'}${pet?.breed ? ' • ' + pet.breed : ''}). Managed via VetBook Animal Clinic.`,
+      });
+    } catch (_) {}
+  };
 
   const handleDeletePress = () => {
     setDeleteDialogVisible(true);
@@ -306,7 +326,11 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
         const asset = result.assets[0];
-        const pickedUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        const mimeType =
+          asset.mimeType && asset.mimeType.startsWith('image/')
+            ? asset.mimeType
+            : 'image/jpeg';
+        const pickedUri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
         setUploadingAvatar(true);
         try {
           const res = await api.uploadPetAvatar(pet.id, pickedUri);
@@ -326,13 +350,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
   };
 
   const handleBook = () => {
-    // BookAppointment is built in a later step; avoid a dev-time navigation error.
-    const routeNames = navigation.getState?.()?.routeNames ?? [];
-    if (routeNames.includes('BookAppointment')) {
-      navigation.navigate('BookAppointment', { petId, pet });
-    } else {
-      Alert.alert('Book Appointment', 'Appointment booking coming soon!');
-    }
+    navigation.navigate('BookAppointment', { petId: pet?.id ?? petId, pet });
   };
 
   const handleCallClinic = () => setContactModalVisible(true);
@@ -704,8 +722,13 @@ const PetDetailsScreen = ({ route, navigation }) => {
         {/* ── 2. Hero Pet Card ─────────────────────────────────────────── */}
         <View style={styles.heroCard}>
           <View style={styles.photoWrap}>
-            {pet.avatar_url ? (
-              <Image source={{ uri: pet.avatar_url }} style={styles.photo} resizeMode="cover" />
+            {pet.avatar_url && !avatarError ? (
+              <Image
+                source={{ uri: pet.avatar_url }}
+                style={styles.photo}
+                resizeMode="cover"
+                onError={() => setAvatarError(true)}
+              />
             ) : (
               <View style={[styles.photo, styles.photoPlaceholder, { backgroundColor: accent + '22' }]}>
                 <Ionicons name="paw-outline" size={64} color={accent} />

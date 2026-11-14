@@ -30,7 +30,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Animated,
 } from 'react-native';
@@ -430,14 +429,6 @@ const ChatbotScreen = ({ navigation }) => {
 
         {/* ── 6. Input bar ───────────────────────────────────────────────── */}
         <View style={styles.inputBar}>
-          <TouchableOpacity
-            style={styles.cameraBtn}
-            onPress={() => Alert.alert('Attachments', 'Photo attachments coming soon!')}
-            accessibilityLabel="Attach a photo"
-          >
-            <Ionicons name="camera-outline" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-
           <TextInput
             style={styles.input}
             value={inputText}
@@ -768,14 +759,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.divider,
-  },
-  cameraBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.cardWarm,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   input: {
     flex: 1,

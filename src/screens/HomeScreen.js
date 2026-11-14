@@ -198,6 +198,7 @@ const HomeScreen = ({ navigation }) => {
   });
   const [logoLoadError, setLogoLoadError] = useState(false);
   const [userAvatarError, setUserAvatarError] = useState(false);
+  const [failedPetAvatars, setFailedPetAvatars] = useState({});
 
   // Global Notifications State & Real-Time Alerts
   const {
@@ -223,6 +224,7 @@ const HomeScreen = ({ navigation }) => {
         ? response.data
         : [];
       setAppointments(list);
+      setFailedPetAvatars({});
     } catch (err) {
       // Gracefully degrade — show empty state rather than crashing
       console.warn('Could not load appointments:', err?.response?.status ?? err.message);
@@ -572,8 +574,14 @@ const HomeScreen = ({ navigation }) => {
                 >
                   <View style={styles.apptCardMain}>
                     {/* Pet avatar / species icon */}
-                    {pet.avatar_url ? (
-                      <Image source={{ uri: pet.avatar_url }} style={styles.apptPetAvatarImage} />
+                    {pet.avatar_url && !failedPetAvatars[pet.id ?? appt.id] ? (
+                      <Image
+                        source={{ uri: pet.avatar_url }}
+                        style={styles.apptPetAvatarImage}
+                        onError={() =>
+                          setFailedPetAvatars((prev) => ({ ...prev, [pet.id ?? appt.id]: true }))
+                        }
+                      />
                     ) : (
                       <View style={styles.apptPetAvatar}>
                         <Ionicons

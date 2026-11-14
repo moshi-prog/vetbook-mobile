@@ -85,6 +85,7 @@ const MyPetsScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [contactModalVisible, setContactModalVisible] = useState(false);
+  const [failedPetAvatars, setFailedPetAvatars] = useState({});
   const [branches, setBranches] = useState([
     {
       id: 'mabini',
@@ -113,6 +114,7 @@ const MyPetsScreen = ({ navigation }) => {
           ? response.data
           : [];
       setPets(list);
+      setFailedPetAvatars({});
     } catch (err) {
       console.warn('Could not load pets:', err?.response?.status ?? err.message);
       setPets([]);
@@ -205,10 +207,11 @@ const MyPetsScreen = ({ navigation }) => {
       >
         {/* Avatar + status dot */}
         <View style={styles.avatarWrapper}>
-          {pet.avatar_url ? (
+          {pet.avatar_url && !failedPetAvatars[pet.id] ? (
             <Image
               source={{ uri: pet.avatar_url }}
               style={styles.avatarImage}
+              onError={() => setFailedPetAvatars((prev) => ({ ...prev, [pet.id]: true }))}
               resizeMode="cover"
             />
           ) : (

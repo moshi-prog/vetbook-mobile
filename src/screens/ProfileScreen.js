@@ -172,6 +172,7 @@ const ProfileScreen = () => {
     logo_url: null,
   });
   const [logoLoadError, setLogoLoadError] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const [contactModalVisible, setContactModalVisible] = useState(false);
 
   // ── Fetch Branches ─────────────────────────────────────────────────────────
@@ -251,6 +252,11 @@ const ProfileScreen = () => {
 
   const displayName = user?.name || user?.user?.name || 'VetBook User';
   const email = user?.email || user?.user?.email || '';
+  const userAvatarUrl = user?.avatar_url || user?.user?.avatar_url || null;
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [userAvatarUrl]);
 
   // ── Avatar Pick & Upload ───────────────────────────────────────────────────
 
@@ -275,11 +281,13 @@ const ProfileScreen = () => {
       }
 
       const asset = pickerResult.assets[0];
-      const imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+      const mimeType = asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+      const imageUri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
 
       // Optimistic update: show picked photo immediately
       if (auth.updateUserState) {
-        auth.updateUserState({ avatar_url: asset.uri });
+        setAvatarError(false);
+        auth.updateUserState({ avatar_url: imageUri });
       }
 
       setUploadingAvatar(true);
@@ -489,8 +497,12 @@ const ProfileScreen = () => {
             activeOpacity={0.8}
             accessibilityLabel="Change profile picture"
           >
-            {user?.avatar_url ? (
-              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+            {userAvatarUrl && !avatarError ? (
+              <Image
+                source={{ uri: userAvatarUrl }}
+                style={styles.avatar}
+                onError={() => setAvatarError(true)}
+              />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>

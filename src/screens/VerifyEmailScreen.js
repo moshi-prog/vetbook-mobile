@@ -87,7 +87,6 @@ const VerifyEmailScreen = ({ route, navigation }) => {
       } else {
         const msg = result.error || 'Invalid or expired verification code.';
         setErrorMessage(msg);
-        Alert.alert('Verification Failed', msg);
       }
     } catch (err) {
       const msg = err.message || 'An unexpected error occurred.';

@@ -143,6 +143,11 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
   const sc = getStatusColor(status);
   const isUpcoming = status === 'pending' || status === 'approved';
   const pet = appt.pet ?? {};
+  const [petAvatarError, setPetAvatarError] = useState(false);
+
+  React.useEffect(() => {
+    setPetAvatarError(false);
+  }, [pet.avatar_url]);
 
   return (
     <View style={styles.card}>
@@ -151,8 +156,12 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
       <View style={styles.cardBody}>
         {/* Header: pet + status */}
         <View style={styles.cardHeader}>
-          {pet.avatar_url ? (
-            <Image source={{ uri: pet.avatar_url }} style={styles.petAvatar} />
+          {pet.avatar_url && !petAvatarError ? (
+            <Image
+              source={{ uri: pet.avatar_url }}
+              style={styles.petAvatar}
+              onError={() => setPetAvatarError(true)}
+            />
           ) : (
             <View style={[styles.petAvatar, styles.petAvatarFallback]}>
               <Ionicons name="paw" size={20} color={colors.primary} />

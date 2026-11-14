@@ -153,6 +153,8 @@ export const getMedicalRecords = (petId) => api.get(`/pets/${petId}/medical-reco
 // ============= APPOINTMENT ENDPOINTS (for later) =============
 
 export const getUserAppointments = () => api.get('/user/appointments');
+export const getBookedSlots = (branch, date) =>
+  api.get('/appointments/booked-slots', { params: { branch, date } });
 export const getAppointment = (id) => api.get(`/appointments/${id}`);
 export const createAppointment = (data) => api.post('/appointments', data);
 export const rescheduleAppointment = (id, data) => api.put(`/appointments/${id}/reschedule`, data);
@@ -191,6 +193,7 @@ api.uploadUserAvatar = uploadUserAvatar;
 api.uploadPetAvatar = uploadPetAvatar;
 api.getMedicalRecords = getMedicalRecords;
 api.getUserAppointments = getUserAppointments;
+api.getBookedSlots = getBookedSlots;
 api.getAppointment = getAppointment;
 api.createAppointment = createAppointment;
 api.rescheduleAppointment = rescheduleAppointment;
