@@ -35,10 +35,12 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import api from '../services/api';
@@ -69,6 +71,12 @@ const SECTION_TITLES = {
 };
 
 const BRANCHES = ['All Branches', 'Mabini Branch', 'Batangas City Branch'];
+
+const BRANCH_SHORT_LABELS = {
+  'All Branches': 'All Branches',
+  'Mabini Branch': 'Mabini',
+  'Batangas City Branch': 'Batangas',
+};
 
 const STATUS_LABELS = {
   pending: 'Pending Review',
@@ -134,6 +142,46 @@ const formatTime = (value) => {
 };
 
 const bookingRef = (id) => `VB-${String(id ?? 0).padStart(6, '0')}`;
+
+const formatPetAge = (pet) => {
+  if (!pet) return null;
+  const yrs = pet.age != null ? Number(pet.age) : null;
+  const mos = pet.age_months != null ? Number(pet.age_months) : null;
+  if ((yrs === null || yrs === 0) && mos && mos > 0) {
+    return `${mos} ${mos === 1 ? 'mo' : 'mos'}`;
+  }
+  if (yrs !== null && !Number.isNaN(yrs)) {
+    if (yrs > 0 && mos && mos > 0) return `${yrs}y ${mos}m`;
+    return `${yrs} ${yrs === 1 ? 'yr' : 'yrs'}`;
+  }
+  return null;
+};
+
+const getBranchStreetHint = (branch) => {
+  const b = String(branch ?? '').toLowerCase();
+  if (b.includes('mabini')) return ' • 142 Mabini St.';
+  if (b.includes('batangas')) return ' • Kumintang Ilaya';
+  return '';
+};
+
+const getTicketBranchAddress = (branch) => {
+  const b = String(branch ?? '').toLowerCase();
+  if (b.includes('mabini')) return '142 Mabini St., Poblacion';
+  if (b.includes('batangas')) return 'N.F. Almario Building, Kumintang Ilaya';
+  return 'VetBook Animal Clinic';
+};
+
+const formatTicketFullDate = (value) => {
+  const d = parseLocalDate(value);
+  return d
+    ? d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : 'Date TBD';
+};
 
 const sortKey = (a) =>
   `${String(a.appointment_date ?? '').slice(0, 10)} ${String(a.appointment_time ?? '').slice(0, 5)}`;
@@ -201,9 +249,12 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
     setPetAvatarError(false);
   }, [pet.avatar_url]);
 
+  const speciesAgeLabel = [pet.species, formatPetAge(pet)].filter(Boolean).join(' • ');
+  const branchHint = getBranchStreetHint(appt.branch);
+
   return (
     <View style={styles.card}>
-      <View style={[styles.accent, { backgroundColor: sc.dot }]} />
+      <View style={[styles.topAccentBar, { backgroundColor: sc.dot }]} />
 
       <View style={styles.cardBody}>
         {/* Header: pet + status */}
@@ -216,39 +267,59 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
             />
           ) : (
             <View style={[styles.petAvatar, styles.petAvatarFallback]}>
-              <Ionicons name="paw" size={20} color={colors.primary} />
+              <Ionicons name="paw" size={19} color={colors.primary} />
             </View>
           )}
           <View style={styles.petInfo}>
             <Text style={styles.petName} numberOfLines={1}>{pet.name ?? 'Pet'}</Text>
-            <Text style={styles.petSub} numberOfLines={1}>
-              {[pet.species, bookingRef(appt.id)].filter(Boolean).join(' • ')}
-            </Text>
+            <View style={styles.metaPillsRow}>
+              {!!speciesAgeLabel && (
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillText}>{speciesAgeLabel}</Text>
+                </View>
+              )}
+              <View style={styles.metaPillTicket}>
+                <Ionicons name="ticket-outline" size={11} color={colors.textSecondary} />
+                <Text style={styles.metaPillText}>{bookingRef(appt.id)}</Text>
+              </View>
+            </View>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
             <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
             <Text style={[styles.statusText, { color: sc.text }]}>
-              {STATUS_LABELS[status] ?? appt.status}
+              {String(STATUS_LABELS[status] ?? appt.status).toUpperCase()}
             </Text>
           </View>
         </View>
 
-        {/* Info box */}
+        {/* Warm Info Box */}
         <View style={styles.infoBox}>
           <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={15} color={colors.textSecondary} />
-            <Text style={styles.infoText} numberOfLines={1}>{appt.branch ?? 'VetBook Clinic'}</Text>
+            <View style={styles.infoIconCircle}>
+              <Ionicons name="location-outline" size={13} color={colors.primary} />
+            </View>
+            <Text style={styles.infoPrimaryText} numberOfLines={1}>
+              {appt.branch ?? 'VetBook Clinic'}
+              {!!branchHint && <Text style={styles.infoHintText}>{branchHint}</Text>}
+            </Text>
           </View>
           <View style={styles.infoRow}>
-            <Ionicons name="calendar-outline" size={15} color={colors.textSecondary} />
-            <Text style={styles.infoText}>
-              {formatDate(appt.appointment_date)} • {formatTime(appt.appointment_time)}
+            <View style={styles.infoIconCircle}>
+              <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+            </View>
+            <Text style={styles.infoPrimaryText} numberOfLines={1}>
+              {formatDate(appt.appointment_date)}
+              <Text style={styles.infoTimeHighlight}> • {formatTime(appt.appointment_time)}</Text>
             </Text>
           </View>
           {!!appt.reason && (
             <View style={styles.infoRow}>
-              <Ionicons name="clipboard-outline" size={15} color={colors.textSecondary} />
-              <Text style={styles.infoText} numberOfLines={1}>{appt.reason}</Text>
+              <View style={styles.infoIconCircle}>
+                <Ionicons name="clipboard-outline" size={13} color={colors.primary} />
+              </View>
+              <Text style={styles.infoReasonText} numberOfLines={1}>
+                Reason: <Text style={styles.infoReasonBold}>{appt.reason}</Text>
+              </Text>
             </View>
           )}
         </View>
@@ -266,41 +337,42 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
         {isUpcoming ? (
           <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.btn, styles.btnOutline]}
+              style={[styles.cardActionBtn, styles.btnReschedule]}
               onPress={() => onReschedule(appt.id)}
               disabled={busy}
               activeOpacity={0.8}
             >
-              <Text style={styles.btnOutlineText}>Reschedule</Text>
+              <Text style={styles.btnRescheduleText}>Reschedule</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.btn, styles.btnDanger]}
+              style={[styles.cardActionBtn, styles.btnCancel]}
               onPress={() => onCancel(appt.id)}
               disabled={busy}
               activeOpacity={0.8}
             >
               {busy ? (
-                <ActivityIndicator size="small" color={colors.alertRed} />
+                <ActivityIndicator size="small" color="#C93B3B" />
               ) : (
-                <Text style={styles.btnDangerText}>Cancel</Text>
+                <Text style={styles.btnCancelText}>Cancel</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.btn, styles.btnPrimary]}
+              style={[styles.cardActionBtn, styles.btnViewTicket]}
               onPress={() => onView(appt.id)}
               disabled={busy}
               activeOpacity={0.85}
             >
-              <Text style={styles.btnPrimaryText}>View</Text>
+              <Text style={styles.btnViewTicketText}>View Ticket</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.detailsLink}
+            style={styles.pastViewTicketBtn}
             onPress={() => onView(appt.id)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
-            <Text style={styles.detailsLinkText}>View Details</Text>
+            <Ionicons name="ticket-outline" size={14} color={colors.primary} />
+            <Text style={styles.pastViewTicketText}>View Ticket</Text>
             <Ionicons name="chevron-forward" size={14} color={colors.primary} />
           </TouchableOpacity>
         )}
@@ -322,6 +394,14 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState(null);
   const [branches, setBranches] = useState([]);
+
+  // Ticket preview modal state
+  const [selectedTicketAppt, setSelectedTicketAppt] = useState(null);
+  const [ticketAvatarError, setTicketAvatarError] = useState(false);
+
+  React.useEffect(() => {
+    setTicketAvatarError(false);
+  }, [selectedTicketAppt?.id, selectedTicketAppt?.pet?.avatar_url]);
 
   // Reschedule state
   const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
@@ -508,13 +588,19 @@ const MyAppointmentsScreen = ({ navigation }) => {
         if (selectedBranch === 'Batangas City Branch' && !b.includes('batangas')) return false;
       }
 
-      // Search match (pet name, reason, branch, notes)
+      // Search match (pet name, reason, branch, notes, ticket #)
       if (q.length > 0) {
         const petName = (a.pet?.name ?? '').toLowerCase();
         const reason = (a.reason ?? '').toLowerCase();
         const branch = (a.branch ?? '').toLowerCase();
         const notes = (a.notes ?? '').toLowerCase();
-        const match = petName.includes(q) || reason.includes(q) || branch.includes(q) || notes.includes(q);
+        const ref = bookingRef(a.id).toLowerCase();
+        const match =
+          petName.includes(q) ||
+          reason.includes(q) ||
+          branch.includes(q) ||
+          notes.includes(q) ||
+          ref.includes(q);
         if (!match) return false;
       }
 
@@ -537,19 +623,100 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const handleView = (id) => {
     const a = appointments.find((x) => x.id === id);
     if (!a) return;
-    // No dedicated details screen yet — show the booking summary.
-    showDialog(
-      `Appointment ${bookingRef(a.id)}`,
-      [
-        `Pet: ${a.pet?.name ?? '-'}`,
-        `Status: ${STATUS_LABELS[normStatus(a.status)] ?? a.status}`,
-        `Branch: ${a.branch ?? '-'}`,
-        `Date: ${formatDate(a.appointment_date)}`,
-        `Time: ${formatTime(a.appointment_time)}`,
-        `Reason: ${a.reason ?? '-'}`,
-        a.notes ? `Notes: ${a.notes}` : null,
-      ].filter(Boolean).join('\n'),
-      'info'
+    setSelectedTicketAppt(a);
+  };
+
+  const handleAddTicketToCalendar = async (appt) => {
+    if (!appt) return;
+    const petName = appt.pet?.name ?? 'Your pet';
+    const branchName = appt.branch || 'VetBook Animal Clinic';
+    const branchAddress = getTicketBranchAddress(branchName);
+    const eventTitle = `Vet Appointment for ${petName}`;
+    const eventLocation = `${branchName}${branchAddress ? ` - ${branchAddress}` : ''}`;
+    const eventDescription = `Appointment ${bookingRef(appt.id)} for ${petName}. Reason: ${appt.reason || 'General Visit'}. Managed via VetBook.`;
+
+    const parsedDate = parseLocalDate(appt.appointment_date);
+    const effectiveDate = parsedDate || new Date();
+    const rawTime = appt.appointment_time;
+
+    let startDate = new Date(
+      effectiveDate.getFullYear(),
+      effectiveDate.getMonth(),
+      effectiveDate.getDate(),
+      9,
+      0,
+      0
+    );
+    let hasExactTime = false;
+
+    if (rawTime) {
+      const timeMatch = /(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i.exec(String(rawTime));
+      if (timeMatch) {
+        let h = Number(timeMatch[1]);
+        const m = Number(timeMatch[2]);
+        const meridiem = timeMatch[3]?.toUpperCase();
+        if (meridiem === 'PM' && h < 12) h += 12;
+        if (meridiem === 'AM' && h === 12) h = 0;
+
+        if (!Number.isNaN(h) && !Number.isNaN(m)) {
+          startDate = new Date(
+            effectiveDate.getFullYear(),
+            effectiveDate.getMonth(),
+            effectiveDate.getDate(),
+            h,
+            m,
+            0
+          );
+          hasExactTime = true;
+        }
+      }
+    }
+
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+
+    try {
+      if (Platform.OS === 'android') {
+        await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+          data: 'content://com.android.calendar/events',
+          type: 'vnd.android.cursor.item/event',
+          extra: {
+            title: eventTitle,
+            description: eventDescription,
+            eventLocation,
+            beginTime: startDate.getTime(),
+            endTime: endDate.getTime(),
+            allDay: false,
+          },
+        });
+        return;
+      }
+
+      if (Platform.OS === 'ios') {
+        const iosCalUrl = `calshow:${startDate.getTime() / 1000}`;
+        const canOpen = await Linking.canOpenURL(iosCalUrl);
+        if (canOpen) {
+          await Linking.openURL(iosCalUrl);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Calendar] Native calendar launch failed, falling back to web calendar:', err?.message || err);
+    }
+
+    // Fallback for Web or when native calendar launch fails
+    let datesParam = '';
+    if (parsedDate && hasExactTime) {
+      const fmtCal = (d) =>
+        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      datesParam = `&dates=${fmtCal(startDate)}/${fmtCal(endDate)}`;
+    }
+
+    const title = encodeURIComponent(eventTitle);
+    const loc = encodeURIComponent(eventLocation);
+    const details = encodeURIComponent(eventDescription);
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}&details=${details}${datesParam}`;
+    Linking.openURL(url).catch(() =>
+      showDialog('Notice', 'Could not open calendar app.', 'warning')
     );
   };
 
@@ -699,19 +866,32 @@ const MyAppointmentsScreen = ({ navigation }) => {
       <View style={styles.topBar}>
         <View style={styles.titleWrap}>
           <View style={styles.leafBadge}>
-            <Ionicons name="leaf" size={16} color={colors.white} />
+            <Ionicons name="leaf" size={17} color={colors.white} />
           </View>
-          <Text style={styles.title}>My Appointments</Text>
+          <View style={styles.titleCol}>
+            <Text style={styles.title}>My Appointments</Text>
+            <Text style={styles.subtitle}>Manage and track your clinic visits</Text>
+          </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.bookPillBtn}
+          onPress={goBook}
+          activeOpacity={0.85}
+          accessibilityLabel="Book appointment"
+        >
+          <Ionicons name="add" size={15} color={colors.primaryDeep} />
+          <Text style={styles.bookPillText}>Book</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* ── 2. Search & Branch Row ─────────────────────────────────────── */}
+      {/* ── 2. Search Row ──────────────────────────────────────────────── */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrap}>
           <Ionicons name="search" size={16} color={colors.textTertiary} style={styles.searchIcon} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search pet, reason, branch..."
+            style={[styles.searchInput, Platform.OS === 'web' && { outlineStyle: 'none' }]}
+            placeholder="Search pet, reason, or ticket #..."
             placeholderTextColor={colors.textTertiary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -725,23 +905,26 @@ const MyAppointmentsScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* ── Branch Pills ─────────────────────────────────────────────────── */}
-      <View style={styles.branchRowWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.branchScroll}>
-          {BRANCHES.map((b) => {
-            const active = b === selectedBranch;
-            return (
-              <TouchableOpacity
-                key={b}
-                style={[styles.branchPill, active && styles.branchPillActive]}
-                onPress={() => setSelectedBranch(b)}
-                activeOpacity={0.8}
+      {/* ── 3-Column Segmented Branch Switcher ────────────────────────────── */}
+      <View style={styles.branchSegmentedWrap}>
+        {BRANCHES.map((b) => {
+          const active = b === selectedBranch;
+          return (
+            <TouchableOpacity
+              key={b}
+              style={[styles.branchSegment, active && styles.branchSegmentActive]}
+              onPress={() => setSelectedBranch(b)}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[styles.branchSegmentText, active && styles.branchSegmentTextActive]}
+                numberOfLines={1}
               >
-                <Text style={[styles.branchPillText, active && styles.branchPillTextActive]}>{b}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                {BRANCH_SHORT_LABELS[b] ?? b}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* ── Status Filter tabs ───────────────────────────────────────────── */}
@@ -749,6 +932,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {FILTERS.map((f) => {
             const active = f === activeFilter;
+            const tabLabel = active && filtered.length > 0 ? `${f} (${filtered.length})` : f;
             return (
               <TouchableOpacity
                 key={f}
@@ -757,7 +941,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
                 activeOpacity={0.8}
                 accessibilityLabel={`${f} appointments`}
               >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{tabLabel}</Text>
               </TouchableOpacity>
             );
           })}
@@ -1067,6 +1251,192 @@ const MyAppointmentsScreen = ({ navigation }) => {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ── Rich Ticket Card Modal ────────────────────────────────────────── */}
+      <Modal
+        visible={!!selectedTicketAppt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedTicketAppt(null)}
+      >
+        <View style={styles.modalOverlay}>
+          {selectedTicketAppt && (() => {
+            const ticketStatus = normStatus(selectedTicketAppt.status);
+            const ticketSc = getStatusColor(ticketStatus);
+            const ticketIsUpcoming = ticketStatus === 'pending' || ticketStatus === 'approved';
+            const ticketPet = selectedTicketAppt.pet ?? {};
+            const ticketPetMeta = [ticketPet.species, formatPetAge(ticketPet)].filter(Boolean).join(' • ');
+            const ticketBranchName = selectedTicketAppt.branch ?? 'VetBook Clinic';
+            const ticketBranchAddr = getTicketBranchAddress(ticketBranchName);
+
+            return (
+              <View style={styles.ticketModalCard}>
+                {/* Top 8px accent bar */}
+                <View style={styles.ticketTopAccent} />
+
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.ticketModalScrollContent}
+                >
+                  {/* Header row: Ticket pill + Status badge & Close button */}
+                  <View style={styles.ticketHeaderRow}>
+                    <View style={styles.ticketRefPill}>
+                      <Ionicons name="ticket-outline" size={14} color={colors.primaryDeep} />
+                      <Text style={styles.ticketRefPillText}>{bookingRef(selectedTicketAppt.id)}</Text>
+                    </View>
+
+                    <View style={styles.ticketHeaderRight}>
+                      <View style={[styles.statusBadge, { backgroundColor: ticketSc.bg }]}>
+                        <View style={[styles.statusDot, { backgroundColor: ticketSc.dot }]} />
+                        <Text style={[styles.statusText, { color: ticketSc.text }]}>
+                          {String(STATUS_LABELS[ticketStatus] ?? selectedTicketAppt.status).toUpperCase()}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.ticketCloseBtn}
+                        onPress={() => setSelectedTicketAppt(null)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel="Close ticket"
+                      >
+                        <Ionicons name="close" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Pet profile row */}
+                  <View style={styles.ticketPetRow}>
+                    {ticketPet.avatar_url && !ticketAvatarError ? (
+                      <Image
+                        source={{ uri: ticketPet.avatar_url }}
+                        style={styles.ticketPetAvatar}
+                        onError={() => setTicketAvatarError(true)}
+                      />
+                    ) : (
+                      <View style={[styles.ticketPetAvatar, styles.petAvatarFallback]}>
+                        <Ionicons name="paw" size={22} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={styles.ticketPetInfo}>
+                      <Text style={styles.ticketPetName} numberOfLines={1}>
+                        {ticketPet.name ?? 'Pet'}
+                      </Text>
+                      {!!ticketPetMeta && (
+                        <View style={[styles.metaPill, styles.ticketPetMetaPill]}>
+                          <Text style={styles.metaPillText}>{ticketPetMeta}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Structured Info Rows */}
+                  <View style={styles.ticketDetailsList}>
+                    <View style={styles.ticketDetailRow}>
+                      <View style={styles.ticketDetailIconCircle}>
+                        <Ionicons name="location-outline" size={16} color={colors.primary} />
+                      </View>
+                      <View style={styles.ticketDetailTextWrap}>
+                        <Text style={styles.ticketDetailLabel}>CLINIC & BRANCH</Text>
+                        <Text style={styles.ticketDetailValue}>{ticketBranchName}</Text>
+                        <Text style={styles.ticketDetailSub}>{ticketBranchAddr}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.ticketDetailRow}>
+                      <View style={styles.ticketDetailIconCircle}>
+                        <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                      </View>
+                      <View style={styles.ticketDetailTextWrap}>
+                        <Text style={styles.ticketDetailLabel}>DATE & TIME</Text>
+                        <Text style={styles.ticketDetailValue}>
+                          {formatTicketFullDate(selectedTicketAppt.appointment_date)}
+                        </Text>
+                        <Text style={styles.ticketDetailSub}>
+                          {formatTime(selectedTicketAppt.appointment_time)} (GMT+8)
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.ticketDetailRow}>
+                      <View style={styles.ticketDetailIconCircle}>
+                        <Ionicons name="medkit-outline" size={16} color={colors.primary} />
+                      </View>
+                      <View style={styles.ticketDetailTextWrap}>
+                        <Text style={styles.ticketDetailLabel}>REASON FOR VISIT</Text>
+                        <Text style={styles.ticketDetailValue}>
+                          {selectedTicketAppt.reason || 'General Visit'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {ticketStatus === 'cancelled' ? (
+                      <View style={styles.cancelReasonBanner}>
+                        <Ionicons name="alert-circle-outline" size={15} color={colors.alertRed} />
+                        <Text style={styles.cancelReasonText}>
+                          Cancellation Reason: {extractCancelReason(selectedTicketAppt.notes)}
+                        </Text>
+                      </View>
+                    ) : !!selectedTicketAppt.notes ? (
+                      <View style={styles.ticketDetailRow}>
+                        <View style={styles.ticketDetailIconCircle}>
+                          <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+                        </View>
+                        <View style={styles.ticketDetailTextWrap}>
+                          <Text style={styles.ticketDetailLabel}>NOTES</Text>
+                          <Text style={styles.ticketDetailSub}>{selectedTicketAppt.notes}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Add to Phone Calendar Button */}
+                  <TouchableOpacity
+                    style={styles.ticketCalendarBtn}
+                    onPress={() => handleAddTicketToCalendar(selectedTicketAppt)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color="#B87A14" />
+                    <Text style={styles.ticketCalendarBtnText}>Add to Phone Calendar</Text>
+                  </TouchableOpacity>
+
+                  {/* Footer Buttons */}
+                  <View style={styles.ticketFooter}>
+                    {ticketIsUpcoming ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.modalCancelBtn}
+                          onPress={() => {
+                            const apptId = selectedTicketAppt.id;
+                            setSelectedTicketAppt(null);
+                            handleReschedule(apptId);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.modalCancelText}>Reschedule</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.modalSaveBtn}
+                          onPress={() => setSelectedTicketAppt(null)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.modalSaveText}>Done</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.ticketDoneFullBtn}
+                        onPress={() => setSelectedTicketAppt(null)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.modalSaveText}>Done</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </ScrollView>
+              </View>
+            );
+          })()}
+        </View>
+      </Modal>
+
       {/* Themed Custom Dialog / Alert */}
       <ThemedDialog {...dialog} />
     </SafeAreaView>
@@ -1088,27 +1458,40 @@ const styles = StyleSheet.create({
     paddingTop: spacing.base,
     paddingBottom: spacing.md,
   },
-  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginRight: spacing.sm },
   leafBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  titleCol: { flex: 1 },
   title: {
     fontFamily: fonts.heading,
     fontSize: fontSizes.xxl,
     color: colors.textPrimary,
   },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.cardWarm,
+  subtitle: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs + 1,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  bookPillBtn: {
+    backgroundColor: colors.primaryPale,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+  },
+  bookPillText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs + 1,
+    color: colors.primaryDeep,
   },
 
   // Search
@@ -1120,9 +1503,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderRadius: radii.pill,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: '#E6E0D4',
     paddingHorizontal: spacing.md,
     height: 42,
   },
@@ -1137,33 +1520,32 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
 
-  // Branch pills
-  branchRowWrap: {
-    paddingBottom: spacing.xs,
-  },
-  branchScroll: {
+  // 3-Column Segmented Branch Switcher
+  branchSegmentedWrap: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    backgroundColor: '#EDE7DC',
+    borderRadius: radii.md,
+    padding: 4,
     flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
   },
-  branchPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.cardWarm,
-    borderWidth: 1,
-    borderColor: 'transparent',
+  branchSegment: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  branchPillActive: {
-    backgroundColor: colors.primaryPale,
-    borderColor: colors.primary,
+  branchSegmentActive: {
+    backgroundColor: colors.white,
+    ...shadows.soft,
   },
-  branchPillText: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.xs,
+  branchSegmentText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs + 1,
     color: colors.textSecondary,
   },
-  branchPillTextActive: {
+  branchSegmentTextActive: {
     fontFamily: fonts.bodyBold,
     color: colors.primaryDeep,
   },
@@ -1179,18 +1561,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   filterTab: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: '#E5DFD3',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.cardWarm,
   },
-  filterTabActive: { backgroundColor: colors.primary },
+  filterTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
   filterText: {
     fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.body,
     color: colors.textSecondary,
   },
-  filterTextActive: { color: colors.white },
+  filterTextActive: {
+    fontFamily: fonts.bodyBold,
+    color: colors.white,
+  },
 
   // List
   list: {
@@ -1244,67 +1634,120 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     backgroundColor: colors.white,
     borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: '#EAE4D7',
     overflow: 'hidden',
     marginBottom: spacing.base,
     ...shadows.card,
   },
-  accent: { width: 5 },
-  cardBody: { flex: 1, padding: spacing.base },
+  topAccentBar: { height: 6, width: '100%' },
+  cardBody: { padding: spacing.base },
   cardHeader: { flexDirection: 'row', alignItems: 'center' },
   petAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.cardWarm,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: '#CFE2D5',
+    backgroundColor: '#E8F1EB',
   },
   petAvatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primaryPale,
+    backgroundColor: '#E8F1EB',
   },
   petInfo: { flex: 1, marginLeft: spacing.md, marginRight: spacing.sm },
   petName: {
     fontFamily: fonts.heading,
-    fontSize: fontSizes.lg,
+    fontSize: fontSizes.md + 1,
     color: colors.textPrimary,
   },
-  petSub: {
-    fontFamily: fonts.bodyRegular,
-    fontSize: fontSizes.body,
+  metaPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  metaPill: {
+    backgroundColor: '#F5F1E8',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+  },
+  metaPillTicket: {
+    backgroundColor: '#F5F1E8',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metaPillText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs + 1,
     color: colors.textSecondary,
-    marginTop: 1,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
+    flexShrink: 0,
   },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: {
     fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.xs + 1,
+    fontSize: fontSizes.xs,
     letterSpacing: 0.3,
   },
 
   infoBox: {
-    backgroundColor: colors.cardWarm,
+    backgroundColor: '#FAF7F2',
+    borderWidth: 1,
+    borderColor: '#EFEAE0',
     borderRadius: radii.md,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: 8,
     marginTop: spacing.md,
   },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  infoText: {
+  infoIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoPrimaryText: {
     flex: 1,
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.body + 1,
-    color: colors.textTertiary,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.body,
+    color: colors.textPrimary,
+  },
+  infoHintText: {
+    fontFamily: fonts.bodyRegular,
+    color: colors.textSecondary,
+  },
+  infoTimeHighlight: {
+    color: colors.primary,
+    fontFamily: fonts.bodyBold,
+  },
+  infoReasonText: {
+    flex: 1,
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.body,
+    color: colors.textSecondary,
+  },
+  infoReasonBold: {
+    fontFamily: fonts.bodyBold,
+    color: colors.textPrimary,
   },
   cancelReasonBanner: {
     flexDirection: 'row',
@@ -1328,42 +1771,57 @@ const styles = StyleSheet.create({
   },
 
   // Actions
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  btn: {
+  actions: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
+  cardActionBtn: {
     flex: 1,
     height: 38,
-    borderRadius: radii.pill,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnOutline: { borderWidth: 1, borderColor: colors.borderDashed, backgroundColor: colors.white },
-  btnOutlineText: {
+  btnReschedule: {
+    borderWidth: 1,
+    borderColor: '#D5CFC2',
+    backgroundColor: colors.white,
+  },
+  btnRescheduleText: {
     fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.body + 1,
+    fontSize: fontSizes.body,
     color: colors.textPrimary,
   },
-  btnDanger: { backgroundColor: colors.alertRedLight },
-  btnDangerText: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.body + 1,
-    color: colors.alertRedDark,
+  btnCancel: {
+    borderWidth: 1,
+    borderColor: '#F2C6C6',
+    backgroundColor: '#FFF5F5',
   },
-  btnPrimary: { backgroundColor: colors.primary },
-  btnPrimaryText: {
+  btnCancelText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.body,
+    color: '#C93B3B',
+  },
+  btnViewTicket: {
+    backgroundColor: colors.primary,
+  },
+  btnViewTicketText: {
     fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.body + 1,
+    fontSize: fontSizes.body,
     color: colors.white,
   },
-  detailsLink: {
+  pastViewTicketBtn: {
+    marginTop: spacing.md,
+    height: 38,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#D5CFC2',
+    backgroundColor: colors.white,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: 2,
-    marginTop: spacing.md,
+    justifyContent: 'center',
+    gap: 6,
   },
-  detailsLinkText: {
+  pastViewTicketText: {
     fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.body + 1,
     color: colors.primary,
   },
 
@@ -1673,6 +2131,155 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: radii.pill,
     backgroundColor: colors.alertRed,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Rich Ticket Card Modal Styles
+  ticketModalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '88%',
+    ...shadows.card,
+  },
+  ticketTopAccent: {
+    height: 8,
+    width: '100%',
+    backgroundColor: colors.primary,
+  },
+  ticketModalScrollContent: {
+    padding: spacing.lg,
+  },
+  ticketHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  ticketRefPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F5F1E8',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+  },
+  ticketRefPillText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.body,
+    color: colors.primaryDeep,
+    letterSpacing: 0.4,
+  },
+  ticketHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  ticketCloseBtn: {
+    padding: spacing.xs,
+  },
+  ticketPetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  ticketPetAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#CFE2D5',
+    backgroundColor: '#E8F1EB',
+  },
+  ticketPetInfo: {
+    flex: 1,
+  },
+  ticketPetName: {
+    fontFamily: fonts.heading,
+    fontSize: fontSizes.lg,
+    color: colors.textPrimary,
+  },
+  ticketPetMetaPill: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  ticketDetailsList: {
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  ticketDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  ticketDetailIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F1E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketDetailTextWrap: {
+    flex: 1,
+  },
+  ticketDetailLabel: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    letterSpacing: 0.6,
+  },
+  ticketDetailValue: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  ticketDetailSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.body,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  ticketCalendarBtn: {
+    backgroundColor: '#FDF6E7',
+    borderWidth: 1,
+    borderColor: '#F3DFB6',
+    borderRadius: radii.md,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: spacing.md,
+  },
+  ticketCalendarBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.body + 1,
+    color: '#B87A14',
+    textDecorationLine: 'underline',
+  },
+  ticketFooter: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  ticketDoneFullBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

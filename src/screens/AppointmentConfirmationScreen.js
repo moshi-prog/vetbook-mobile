@@ -30,6 +30,7 @@ import {
   Alert,
   Linking,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -110,6 +111,7 @@ const InfoItem = ({ icon, label, value, subValue, last }) => (
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 const AppointmentConfirmationScreen = ({ route, navigation }) => {
+  const { height: windowHeight } = useWindowDimensions();
   const { appointment, pet, branch, date, time, reason } = route?.params || {};
 
   // Booking reference
@@ -284,31 +286,43 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[
+        styles.safe,
+        Platform.OS === 'web' && { height: windowHeight, overflow: 'hidden' },
+      ]}
+      edges={['top', 'bottom']}
+    >
       {/* ── 1. Decorative accent bar ─────────────────────────────────────── */}
       <GradientBar height={6} />
 
+      {/* ── 2. Brand row (pinned outside scroll) ─────────────────────────── */}
+      <View style={styles.brandRow}>
+        <TouchableOpacity
+          onPress={handleBackHome}
+          style={styles.brandIconBtn}
+          accessibilityLabel="Go to home"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="home-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+
+        <Text style={styles.wordmark}>VetBook</Text>
+
+        {/* Spacer to keep VetBook wordmark centered (matches brandIconBtn width) */}
+        <View style={{ width: 36 }} />
+      </View>
+
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
+        bounces={true}
+        alwaysBounceVertical={true}
+        showsVerticalScrollIndicator={true}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* ── 2. Brand row ───────────────────────────────────────────────── */}
-        <View style={styles.brandRow}>
-          <TouchableOpacity
-            onPress={handleBackHome}
-            style={styles.brandIconBtn}
-            accessibilityLabel="Go to home"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="home-outline" size={22} color={colors.primary} />
-          </TouchableOpacity>
-
-          <Text style={styles.wordmark}>VetBook</Text>
-
-          {/* Spacer to keep VetBook wordmark centered (matches brandIconBtn width) */}
-          <View style={{ width: 36 }} />
-        </View>
-
         {/* ── 3. Success badge ───────────────────────────────────────────── */}
         <View style={styles.badgeWrap}>
           <View style={styles.glowOuter} />
@@ -442,16 +456,22 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const GLOW_SIZE = 140;
+const GLOW_SIZE = 116;
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
   },
+  scrollView: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+  },
   scroll: {
+    flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl + 32,
     alignItems: 'center',
   },
 
@@ -461,6 +481,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.base,
     paddingBottom: spacing.sm,
   },
@@ -484,8 +505,8 @@ const styles = StyleSheet.create({
     height: GLOW_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.base,
-    marginBottom: spacing.base,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
   },
   glowOuter: {
     position: 'absolute',
@@ -497,24 +518,24 @@ const styles = StyleSheet.create({
   },
   glowInner: {
     position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: colors.primaryPale,
     opacity: 0.45,
   },
   badgeOuter: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: colors.primaryPale,
     alignItems: 'center',
     justifyContent: 'center',
   },
   badgeInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -534,7 +555,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
     marginTop: spacing.sm,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.base,
     paddingHorizontal: spacing.base,
   },
 
