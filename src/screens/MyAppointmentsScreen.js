@@ -640,15 +640,22 @@ const MyAppointmentsScreen = ({ navigation }) => {
     );
 
     try {
-      await openPhoneCalendar({
+      const res = await openPhoneCalendar({
         title: eventTitle,
         description: eventDescription,
         location: eventLocation,
         startDate,
         endDate,
       });
+      if (res?.method === 'ics' && Platform.OS === 'web') {
+        showDialog(
+          'Calendar Event Ready',
+          'Tap "Open" on the downloaded calendar file (vetbook-appointment.ics) to save this appointment directly in your phone\'s Calendar app.',
+          'success'
+        );
+      }
     } catch {
-      showDialog('Notice', 'Could not open calendar app.', 'warning');
+      showDialog('Notice', 'Could not open calendar app.', 'error');
     }
   };
 

@@ -84,9 +84,24 @@ export const buildIcsContent = ({ title, description, location, startDate, endDa
     `SUMMARY:${escapeIcsText(title)}`,
     `DESCRIPTION:${escapeIcsText(description)}`,
     `LOCATION:${escapeIcsText(location)}`,
+    'BEGIN:VALARM',
+    'TRIGGER:-PT60M',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:VetBook Appointment Reminder',
+    'END:VALARM',
     'END:VEVENT',
     'END:VCALENDAR',
   ].join('\r\n');
+};
+
+const triggerAnchorClick = (href, downloadName) => {
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = downloadName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 /**
@@ -117,36 +132,17 @@ export async function openPhoneCalendar({ title, description, location, startDat
         allDay: false,
       },
     });
-    return;
+    return { method: 'android-intent' };
   }
 
   if (Platform.OS === 'ios') {
     const iosCalUrl = `calshow:${Math.floor(start.getTime() / 1000)}`;
     await Linking.openURL(iosCalUrl);
-    return;
+    return { method: 'ios-calshow' };
   }
 
   if (Platform.OS === 'web') {
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
-
-    // 1. Android PWA: Launch native Android Calendar directly via intent:// URI
-    if (/Android/i.test(ua) && typeof window !== 'undefined') {
-      const intentUrl =
-        `intent://com.android.calendar/events#Intent;` +
-        `scheme=content;` +
-        `action=android.intent.action.INSERT;` +
-        `type=vnd.android.cursor.item/event;` +
-        `S.title=${encodeURIComponent(safeTitle)};` +
-        `S.description=${encodeURIComponent(safeDescription)};` +
-        `S.eventLocation=${encodeURIComponent(safeLocation)};` +
-        `l.beginTime=${start.getTime()};` +
-        `l.endTime=${end.getTime()};` +
-        `B.allDay=false;` +
-        `end`;
-      window.location.href = intentUrl;
-      return;
-    }
-
     const icsContent = buildIcsContent({
       title: safeTitle,
       description: safeDescription,
@@ -155,27 +151,28 @@ export async function openPhoneCalendar({ title, description, location, startDat
       endDate: end,
     });
 
-    // 2. iOS PWA: Open .ics payload directly in the built-in iPhone/iPad Calendar app
-    const isIosUa =
-      /iPhone|iPad|iPod/i.test(ua) ||
-      (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1);
-    if (isIosUa && typeof window !== 'undefined') {
-      window.location.href = `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
-      return;
-    }
+    if (typeof document !== 'undefined') {
+      const isIosUa =
+        /iPhone|iPad|iPod/i.test(ua) ||
+        (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1);
 
-    // 3. Desktop / Fallback: Trigger .ics download so local system Calendar opens
-    if (typeof document !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
-      const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = 'vetbook-appointment.ics';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-      return;
+      // 1. iOS Safari / iOS PWA: Open data:text/calendar via hidden <a> click without overwriting location.href
+      if (isIosUa) {
+        triggerAnchorClick(
+          `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`,
+          'vetbook-appointment.ics'
+        );
+        return { method: 'ics' };
+      }
+
+      // 2. Android PWA & Desktop Web: Download .ics Blob without navigating away from the PWA
+      if (typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        triggerAnchorClick(blobUrl, 'vetbook-appointment.ics');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+        return { method: 'ics' };
+      }
     }
   }
 

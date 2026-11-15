@@ -27,7 +27,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -36,6 +35,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
+import ThemedDialog from '../components/ThemedDialog';
 import { openPhoneCalendar, buildCalendarEventDates } from '../utils/calendar';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -179,6 +179,18 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   // Reason
   const reasonText = reason || appointment?.reason || 'General visit';
 
+  // Dialog state (works reliably across both native APKs and PWA web)
+  const [dialog, setDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
+
+  const showDialog = (title, message, type = 'info') => {
+    setDialog({ visible: true, title, message, type });
+  };
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleViewAppointments = () => {
@@ -208,15 +220,22 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
     const { startDate, endDate } = buildCalendarEventDates(effectiveDate, rawTime);
 
     try {
-      await openPhoneCalendar({
+      const res = await openPhoneCalendar({
         title: eventTitle,
         description: eventDescription,
         location: eventLocation,
         startDate,
         endDate,
       });
+      if (res?.method === 'ics' && Platform.OS === 'web') {
+        showDialog(
+          'Calendar Event Ready',
+          'Tap "Open" on the downloaded calendar file (vetbook-appointment.ics) to save this appointment directly in your phone\'s Calendar app.',
+          'success'
+        );
+      }
     } catch {
-      Alert.alert('Notice', 'Could not open calendar app.');
+      showDialog('Notice', 'Could not open calendar app.', 'error');
     }
   };
 
@@ -387,6 +406,12 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
           <Text style={styles.secondaryBtnText}>Back to Home</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <ThemedDialog
+        {...dialog}
+        confirmText="OK"
+        onConfirm={() => setDialog((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 };
