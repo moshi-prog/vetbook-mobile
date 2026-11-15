@@ -45,7 +45,6 @@ import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
-import { openPhoneCalendar, buildCalendarEventDates } from '../utils/calendar';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -623,40 +622,6 @@ const MyAppointmentsScreen = ({ navigation }) => {
     const a = appointments.find((x) => x.id === id);
     if (!a) return;
     setSelectedTicketAppt(a);
-  };
-
-  const handleAddTicketToCalendar = async (appt) => {
-    if (!appt) return;
-    const petName = appt.pet?.name ?? 'Your pet';
-    const branchName = appt.branch || 'VetBook Animal Clinic';
-    const branchAddress = getTicketBranchAddress(branchName);
-    const eventTitle = `Vet Appointment for ${petName}`;
-    const eventLocation = `${branchName}${branchAddress ? ` - ${branchAddress}` : ''}`;
-    const eventDescription = `Appointment ${bookingRef(appt.id)} for ${petName}. Reason: ${appt.reason || 'General Visit'}. Managed via VetBook.`;
-
-    const { startDate, endDate } = buildCalendarEventDates(
-      appt.appointment_date,
-      appt.appointment_time
-    );
-
-    try {
-      const res = await openPhoneCalendar({
-        title: eventTitle,
-        description: eventDescription,
-        location: eventLocation,
-        startDate,
-        endDate,
-      });
-      if (res?.method === 'ics' && Platform.OS === 'web') {
-        showDialog(
-          'Calendar Event Ready',
-          'Tap "Open" on the downloaded calendar file (vetbook-appointment.ics) to save this appointment directly in your phone\'s Calendar app.',
-          'success'
-        );
-      }
-    } catch {
-      showDialog('Notice', 'Could not open calendar app.', 'error');
-    }
   };
 
   const handleReschedule = (id) => {
@@ -1325,16 +1290,6 @@ const MyAppointmentsScreen = ({ navigation }) => {
                       </View>
                     ) : null}
                   </View>
-
-                  {/* Add to Phone Calendar Button */}
-                  <TouchableOpacity
-                    style={styles.ticketCalendarBtn}
-                    onPress={() => handleAddTicketToCalendar(selectedTicketAppt)}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="calendar-outline" size={16} color="#B87A14" />
-                    <Text style={styles.ticketCalendarBtnText}>Add to Phone Calendar</Text>
-                  </TouchableOpacity>
 
                   {/* Footer Buttons */}
                   <View style={styles.ticketFooter}>
@@ -2187,24 +2142,6 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.body,
     color: colors.textSecondary,
     marginTop: 1,
-  },
-  ticketCalendarBtn: {
-    backgroundColor: '#FDF6E7',
-    borderWidth: 1,
-    borderColor: '#F3DFB6',
-    borderRadius: radii.md,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: spacing.md,
-  },
-  ticketCalendarBtnText: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.body + 1,
-    color: '#B87A14',
-    textDecorationLine: 'underline',
   },
   ticketFooter: {
     flexDirection: 'row',

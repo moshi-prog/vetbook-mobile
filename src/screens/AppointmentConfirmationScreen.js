@@ -9,8 +9,7 @@
  *  3. Success badge    — 80px pale-green circle, 56px green core, glow rings
  *  4. Heading          — "Appointment Confirmed!" + subtitle
  *  5. Summary card     — booking ref + status, pet row, info items, SMS note
- *  6. Add to Calendar  — amber link
- *  7. Actions          — "View My Appointments" (primary) / "Back to Home"
+ *  6. Actions          — "View My Appointments" (primary) / "Back to Home"
  *
  * Route params (all optional — the screen degrades gracefully):
  *  { appointment, pet, branch, date ('YYYY-MM-DD'), time ('HH:mm'), reason }
@@ -35,8 +34,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
-import ThemedDialog from '../components/ThemedDialog';
-import { openPhoneCalendar, buildCalendarEventDates } from '../utils/calendar';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -179,18 +176,6 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   // Reason
   const reasonText = reason || appointment?.reason || 'General visit';
 
-  // Dialog state (works reliably across both native APKs and PWA web)
-  const [dialog, setDialog] = useState({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'info',
-  });
-
-  const showDialog = (title, message, type = 'info') => {
-    setDialog({ visible: true, title, message, type });
-  };
-
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleViewAppointments = () => {
@@ -205,38 +190,6 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
       index: 0,
       routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
     });
-  };
-
-  const handleAddToCalendar = async () => {
-    const eventTitle = `Vet Appointment for ${petName}`;
-    const eventLocation =
-      branchAddress && branchAddress !== 'VetBook Clinic'
-        ? `${branchName} - ${branchAddress}`
-        : branchName || 'VetBook Animal Clinic';
-    const eventDescription = `Appointment for ${petName}. Reason: ${reasonText || 'General Visit'}. Managed via VetBook.`;
-
-    const effectiveDate = parsedDate || appointment?.appointment_date;
-    const rawTime = time || appointment?.appointment_time;
-    const { startDate, endDate } = buildCalendarEventDates(effectiveDate, rawTime);
-
-    try {
-      const res = await openPhoneCalendar({
-        title: eventTitle,
-        description: eventDescription,
-        location: eventLocation,
-        startDate,
-        endDate,
-      });
-      if (res?.method === 'ics' && Platform.OS === 'web') {
-        showDialog(
-          'Calendar Event Ready',
-          'Tap "Open" on the downloaded calendar file (vetbook-appointment.ics) to save this appointment directly in your phone\'s Calendar app.',
-          'success'
-        );
-      }
-    } catch {
-      showDialog('Notice', 'Could not open calendar app.', 'error');
-    }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -375,18 +328,7 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
           </View>
         </View>
 
-        {/* ── 6. Add to Calendar ─────────────────────────────────────────── */}
-        <TouchableOpacity
-          style={styles.calendarLink}
-          onPress={handleAddToCalendar}
-          activeOpacity={0.7}
-          accessibilityLabel="Add to calendar"
-        >
-          <Ionicons name="calendar-number-outline" size={18} color={colors.amber} />
-          <Text style={styles.calendarText}>Add to Calendar</Text>
-        </TouchableOpacity>
-
-        {/* ── 7. Action buttons ──────────────────────────────────────────── */}
+        {/* ── Action buttons ────────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={handleViewAppointments}
@@ -406,12 +348,6 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
           <Text style={styles.secondaryBtnText}>Back to Home</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      <ThemedDialog
-        {...dialog}
-        confirmText="OK"
-        onConfirm={() => setDialog((prev) => ({ ...prev, visible: false }))}
-      />
     </SafeAreaView>
   );
 };
@@ -689,21 +625,6 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.body,
     lineHeight: 17,
     color: colors.textTertiary,
-  },
-
-  // Calendar link
-  calendarLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  calendarText: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.md,
-    color: colors.amber,
-    textDecorationLine: 'underline',
   },
 
   // Buttons
