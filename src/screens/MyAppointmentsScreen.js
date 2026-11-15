@@ -35,18 +35,17 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import * as IntentLauncher from 'expo-intent-launcher';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
+import { openPhoneCalendar, buildCalendarEventDates } from '../utils/calendar';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -635,89 +634,22 @@ const MyAppointmentsScreen = ({ navigation }) => {
     const eventLocation = `${branchName}${branchAddress ? ` - ${branchAddress}` : ''}`;
     const eventDescription = `Appointment ${bookingRef(appt.id)} for ${petName}. Reason: ${appt.reason || 'General Visit'}. Managed via VetBook.`;
 
-    const parsedDate = parseLocalDate(appt.appointment_date);
-    const effectiveDate = parsedDate || new Date();
-    const rawTime = appt.appointment_time;
-
-    let startDate = new Date(
-      effectiveDate.getFullYear(),
-      effectiveDate.getMonth(),
-      effectiveDate.getDate(),
-      9,
-      0,
-      0
+    const { startDate, endDate } = buildCalendarEventDates(
+      appt.appointment_date,
+      appt.appointment_time
     );
-    let hasExactTime = false;
-
-    if (rawTime) {
-      const timeMatch = /(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i.exec(String(rawTime));
-      if (timeMatch) {
-        let h = Number(timeMatch[1]);
-        const m = Number(timeMatch[2]);
-        const meridiem = timeMatch[3]?.toUpperCase();
-        if (meridiem === 'PM' && h < 12) h += 12;
-        if (meridiem === 'AM' && h === 12) h = 0;
-
-        if (!Number.isNaN(h) && !Number.isNaN(m)) {
-          startDate = new Date(
-            effectiveDate.getFullYear(),
-            effectiveDate.getMonth(),
-            effectiveDate.getDate(),
-            h,
-            m,
-            0
-          );
-          hasExactTime = true;
-        }
-      }
-    }
-
-    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
 
     try {
-      if (Platform.OS === 'android') {
-        await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
-          data: 'content://com.android.calendar/events',
-          type: 'vnd.android.cursor.item/event',
-          extra: {
-            title: eventTitle,
-            description: eventDescription,
-            eventLocation,
-            beginTime: startDate.getTime(),
-            endTime: endDate.getTime(),
-            allDay: false,
-          },
-        });
-        return;
-      }
-
-      if (Platform.OS === 'ios') {
-        const iosCalUrl = `calshow:${startDate.getTime() / 1000}`;
-        const canOpen = await Linking.canOpenURL(iosCalUrl);
-        if (canOpen) {
-          await Linking.openURL(iosCalUrl);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[Calendar] Native calendar launch failed, falling back to web calendar:', err?.message || err);
+      await openPhoneCalendar({
+        title: eventTitle,
+        description: eventDescription,
+        location: eventLocation,
+        startDate,
+        endDate,
+      });
+    } catch {
+      showDialog('Notice', 'Could not open calendar app.', 'warning');
     }
-
-    // Fallback for Web or when native calendar launch fails
-    let datesParam = '';
-    if (parsedDate && hasExactTime) {
-      const fmtCal = (d) =>
-        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
-      datesParam = `&dates=${fmtCal(startDate)}/${fmtCal(endDate)}`;
-    }
-
-    const title = encodeURIComponent(eventTitle);
-    const loc = encodeURIComponent(eventLocation);
-    const details = encodeURIComponent(eventDescription);
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}&details=${details}${datesParam}`;
-    Linking.openURL(url).catch(() =>
-      showDialog('Notice', 'Could not open calendar app.', 'warning')
-    );
   };
 
   const handleReschedule = (id) => {
