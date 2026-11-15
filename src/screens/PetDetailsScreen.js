@@ -85,8 +85,13 @@ const parseAllergies = (medicalConditions) => {
   return match[1].split(',').map((a) => a.trim()).filter(Boolean);
 };
 
-const formatAge = (age) =>
-  age == null || age === '' ? '—' : `${age} yr${Number(age) === 1 ? '' : 's'}`;
+const formatAge = (age, ageMonths) => {
+  const months = Number(ageMonths);
+  if (months > 0 && (!age || Number(age) === 0)) {
+    return `${months} mo${months !== 1 ? 's' : ''}`;
+  }
+  return age == null || age === '' ? '—' : `${age} yr${Number(age) === 1 ? '' : 's'}`;
+};
 
 const formatWeight = (weight) =>
   weight == null || weight === '' ? '—' : `${Number(weight)} kg`;
@@ -405,7 +410,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
   const metaLine = [
     pet.species,
     pet.breed,
-    pet.age != null && pet.age !== '' ? formatAge(pet.age) : null,
+    (pet.age != null && pet.age !== '') || pet.age_months ? formatAge(pet.age, pet.age_months) : null,
     pet.gender ? formatGender(pet.gender) : null,
   ].filter(Boolean).join(' • ');
 
@@ -419,7 +424,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
         <View style={styles.statCard}>
           <Ionicons name="paw-outline" size={18} color={colors.primary} />
           <Text style={styles.statLabel}>AGE</Text>
-          <Text style={styles.statValue}>{formatAge(pet.age)}</Text>
+          <Text style={styles.statValue}>{formatAge(pet.age, pet.age_months)}</Text>
         </View>
         <View style={styles.statCard}>
           <Ionicons name="barbell-outline" size={18} color={colors.primary} />

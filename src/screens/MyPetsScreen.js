@@ -234,10 +234,10 @@ const MyPetsScreen = ({ navigation }) => {
 
           {/* Age + Weight */}
           <View style={styles.petMeta}>
-            {pet.age != null && (
+            {(pet.age != null || pet.age_months) && (
               <View style={styles.petMetaChip}>
                 <Ionicons name="time-outline" size={10} color={colors.textTertiary} />
-                <Text style={styles.petMetaText}>{pet.age} yr{pet.age !== 1 ? 's' : ''}</Text>
+                <Text style={styles.petMetaText}>{pet.age_months && (!pet.age || pet.age === 0) ? `${pet.age_months} mo${pet.age_months !== 1 ? 's' : ''}` : `${pet.age} yr${pet.age !== 1 ? 's' : ''}`}</Text>
               </View>
             )}
             {pet.weight != null && (

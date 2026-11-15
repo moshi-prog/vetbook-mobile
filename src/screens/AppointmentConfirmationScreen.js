@@ -305,14 +305,8 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
 
           <Text style={styles.wordmark}>VetBook</Text>
 
-          <TouchableOpacity
-            onPress={handleBackHome}
-            style={styles.brandIconBtn}
-            accessibilityLabel="Return home"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="home-outline" size={22} color={colors.primary} />
-          </TouchableOpacity>
+          {/* Spacer to keep VetBook wordmark centered (matches brandIconBtn width) */}
+          <View style={{ width: 36 }} />
         </View>
 
         {/* ── 3. Success badge ───────────────────────────────────────────── */}

@@ -85,7 +85,14 @@ const AddPetScreen = ({ navigation, route }) => {
   const [name, setName]                     = useState(initial.name || '');
   const [species, setSpecies]               = useState(initial.species || 'Dog');
   const [breed, setBreed]                   = useState(initial.breed || '');
-  const [age, setAge]                       = useState(initial.age != null ? String(initial.age) : '');
+  const [age, setAge]                       = useState(
+    initial.age_months && (!initial.age || Number(initial.age) === 0)
+      ? String(initial.age_months)
+      : initial.age != null ? String(initial.age) : ''
+  );
+  const [ageUnit, setAgeUnit]               = useState(
+    initial.age_months && (!initial.age || Number(initial.age) === 0) ? 'months' : 'years'
+  );
   const [gender, setGender]                 = useState(isEditMode && initial.gender ? normalizeGender(initial.gender) : 'Female');
   const [weight, setWeight]                 = useState(initial.weight ? String(parseFloat(initial.weight)) : '');
   const [weightUnit, setWeightUnit]         = useState('kg');
@@ -174,7 +181,11 @@ const AddPetScreen = ({ navigation, route }) => {
     }
     if (age !== '') {
       const ageNum = Number(age);
-      if (isNaN(ageNum) || ageNum < 0 || ageNum > 100) {
+      if (ageUnit === 'months') {
+        if (isNaN(ageNum) || !Number.isInteger(ageNum) || ageNum < 1 || ageNum > 11) {
+          newErrors.age = 'Age in months must be a whole number between 1 and 11.';
+        }
+      } else if (isNaN(ageNum) || ageNum < 0 || ageNum > 100) {
         newErrors.age = 'Age must be a number between 0 and 100.';
       }
     }
@@ -214,7 +225,8 @@ const AddPetScreen = ({ navigation, route }) => {
       name: name.trim(),
       species,
       breed: breed.trim() || null,
-      age: age ? parseInt(age, 10) : null,
+      age: age ? (ageUnit === 'months' ? 0 : parseInt(age, 10)) : null,
+      age_months: age && ageUnit === 'months' ? parseInt(age, 10) : null,
       gender,
       weight: finalWeight,
       spayed_neutered: Boolean(spayedNeutered),
@@ -445,13 +457,35 @@ const AddPetScreen = ({ navigation, route }) => {
 
             {/* Birthday / Age */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>
-                Age <Text style={styles.optional}>(years)</Text>
-              </Text>
+              <View style={[styles.weightRow, { marginBottom: spacing.sm }]}>
+                <Text style={[styles.fieldLabel, { flex: 1, marginBottom: 0 }]}>
+                  Age <Text style={styles.optional}>({ageUnit})</Text>
+                </Text>
+                <View style={styles.unitSwitcher}>
+                  {[
+                    { key: 'years', label: 'Years' },
+                    { key: 'months', label: 'Months' },
+                  ].map(({ key, label }) => {
+                    const isActive = ageUnit === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[styles.unitBtn, isActive && styles.unitBtnActive]}
+                        onPress={() => { setAgeUnit(key); setErrors((e) => ({ ...e, age: undefined })); }}
+                        accessibilityLabel={`Age unit ${label}`}
+                      >
+                        <Text style={[styles.unitBtnText, isActive && styles.unitBtnTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
               <View style={styles.inputWithIcon}>
                 <TextInput
                   style={[styles.textInput, styles.textInputFlex, errors.age && styles.textInputError]}
-                  placeholder="e.g. 3"
+                  placeholder={ageUnit === 'months' ? 'e.g. 6' : 'e.g. 3'}
                   placeholderTextColor={colors.borderDashed}
                   value={age}
                   onChangeText={(v) => { setAge(v); setErrors((e) => ({ ...e, age: undefined })); }}
