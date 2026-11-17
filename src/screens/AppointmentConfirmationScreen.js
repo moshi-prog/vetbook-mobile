@@ -321,7 +321,7 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
               />
               <Text style={styles.smsText}>
                 {isPending
-                  ? "You'll receive an SMS acknowledgement shortly, and another SMS once the clinic approves your appointment."
+                  ? "You'll receive an SMS notification once the clinic approves, reschedules, or cancels your appointment."
                   : "You'll receive an SMS confirmation and reminder before your scheduled appointment."}
               </Text>
             </View>
