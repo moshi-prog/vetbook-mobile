@@ -6,7 +6,7 @@
  * Responsibilities:
  *  1. Manages global in-app notification banner state (`showNotificationBanner`, `hideNotificationBanner`).
  *  2. Renders <NotificationBanner /> globally at root level over all navigators.
- *  3. Performs periodic background polling (every 8s) for real-time clinic updates
+ *  3. Performs periodic foreground polling (every 30s) for real-time clinic updates
  *     (e.g., appointment approved, rescheduled, or cancelled by clinic staff).
  *  4. Triggers animated in-app banners and haptic vibration when new unread alerts arrive.
  *  5. Synchronizes unread counter and notification records across the app.
@@ -21,7 +21,7 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { Vibration, Platform } from 'react-native';
+import { Vibration, Platform, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from './AuthContext';
 import {
@@ -185,7 +185,7 @@ export const NotificationProvider = ({ children }) => {
   );
 
   /**
-   * Periodic background polling: every 8 seconds when user is authenticated
+   * Periodic foreground polling: every 30 seconds when user is authenticated & app is active
    */
   useEffect(() => {
     if (!isAuthenticated) {
@@ -198,15 +198,46 @@ export const NotificationProvider = ({ children }) => {
       return;
     }
 
-    // Initial fetch on sign in
-    fetchNotifications(true);
+    let currentAppState = AppState.currentState || 'active';
+    let pollInterval = null;
 
-    // 8-second polling loop for real-time clinic updates
-    const pollInterval = setInterval(() => {
+    const startPolling = () => {
+      if (!pollInterval) {
+        pollInterval = setInterval(() => {
+          fetchNotifications(true);
+        }, 30000);
+      }
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    // Initial fetch and start polling only while active
+    if (currentAppState === 'active') {
       fetchNotifications(true);
-    }, 8000);
+      startPolling();
+    }
 
-    return () => clearInterval(pollInterval);
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        if (currentAppState !== 'active') {
+          fetchNotifications(true);
+        }
+        startPolling();
+      } else {
+        stopPolling();
+      }
+      currentAppState = nextAppState;
+    });
+
+    return () => {
+      stopPolling();
+      appStateSubscription?.remove?.();
+    };
   }, [isAuthenticated, fetchNotifications]);
 
   /**
