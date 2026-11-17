@@ -4,6 +4,7 @@
   },
   "build": {
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -12,7 +13,9 @@
         "EXPO_PUBLIC_API_URL": "https://vetbook-backend.onrender.com/api"
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production"
+    }
   }
 }
 

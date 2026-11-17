@@ -2,7 +2,14 @@
   "expo": {
     "name": "VetBook",
     "slug": "mobile-app",
-    "version": "1.0.1",
+    "version": "1.0.2",
+    "runtimeVersion": "1.0.2",
+    "updates": {
+      "url": "https://u.expo.dev/45c6f071-23ad-4887-8e0b-2c975198c3ae",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +23,7 @@
     },
     "android": {
       "package": "com.vetbook.mobile",
-      "versionCode": 2,
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#1664B8",
