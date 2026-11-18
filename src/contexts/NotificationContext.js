@@ -21,7 +21,18 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { Vibration, Platform, AppState } from 'react-native';
+import {
+  Vibration,
+  Platform,
+  AppState,
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from './AuthContext';
 import {
@@ -30,6 +41,8 @@ import {
   markAllNotificationsRead,
   updatePushToken,
   getVapidPublicKey,
+  confirmAppointmentAttendance,
+  cancelAppointment,
 } from '../services/api';
 import {
   registerForPushNotificationsAsync,
@@ -39,6 +52,7 @@ import {
 } from '../services/notifications';
 import NotificationBanner from '../components/NotificationBanner';
 import { navigationRef } from '../navigation/navigationRef';
+import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 
 const NotificationContext = createContext(null);
 
@@ -60,6 +74,7 @@ export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [reminderModalBusy, setReminderModalBusy] = useState(false);
 
   // Tracking seen notification IDs to detect newly arrived alerts during polling
   const knownNotificationIds = useRef(new Set());
@@ -365,6 +380,59 @@ export const NotificationProvider = ({ children }) => {
     }
   }, []);
 
+  const activeReminderModal = isAuthenticated
+    ? notifications.find(
+        (n) =>
+          !n.read_at &&
+          n.data?.requires_confirmation &&
+          (n.type === 'appointment_reminder_2h' ||
+            n.type === 'appointment_reminder_3h' ||
+            n.type === 'appointment_reminder_24h')
+      )
+    : null;
+
+  const isUrgentReminder = Boolean(
+    activeReminderModal?.data?.is_urgent_2h ||
+      activeReminderModal?.type === 'appointment_reminder_2h' ||
+      activeReminderModal?.type === 'appointment_reminder_3h'
+  );
+
+  const handleConfirmReminderAttendance = useCallback(async () => {
+    if (!activeReminderModal || reminderModalBusy) return;
+    const apptId = activeReminderModal.data?.appointment_id;
+    setReminderModalBusy(true);
+    try {
+      if (apptId) {
+        await confirmAppointmentAttendance(apptId);
+      }
+    } catch (e) {
+      // Fall through to mark read so confirmed/stale alerts dismiss cleanly
+    } finally {
+      await markAsRead(activeReminderModal.id);
+      setReminderModalBusy(false);
+      fetchNotifications(true);
+    }
+  }, [activeReminderModal, reminderModalBusy, markAsRead, fetchNotifications]);
+
+  const handleCancelFromReminder = useCallback(async () => {
+    if (!activeReminderModal || reminderModalBusy) return;
+    const apptId = activeReminderModal.data?.appointment_id;
+    setReminderModalBusy(true);
+    try {
+      if (apptId) {
+        await cancelAppointment(apptId, {
+          cancel_reason: 'Cancelled from appointment reminder prompt',
+        });
+      }
+    } catch (e) {
+      // Fall through to mark read
+    } finally {
+      await markAsRead(activeReminderModal.id);
+      setReminderModalBusy(false);
+      fetchNotifications(true);
+    }
+  }, [activeReminderModal, reminderModalBusy, markAsRead, fetchNotifications]);
+
   return (
     <NotificationContext.Provider
       value={{
@@ -392,9 +460,168 @@ export const NotificationProvider = ({ children }) => {
         onPress={banner.onPress}
         onDismiss={hideNotificationBanner}
       />
+
+      {/* Global Centered Non-Dismissible Interactive Appointment Reminder Popup */}
+      <Modal
+        visible={!!activeReminderModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={reminderStyles.overlay}>
+          {activeReminderModal && (
+            <View style={reminderStyles.card}>
+              <View style={[reminderStyles.badgeRow, isUrgentReminder ? reminderStyles.badgeUrgent : reminderStyles.badgeStandard]}>
+                <Ionicons
+                  name={isUrgentReminder ? 'alarm-outline' : 'calendar-outline'}
+                  size={15}
+                  color={isUrgentReminder ? '#BA1A1A' : '#4A7C59'}
+                />
+                <Text style={[reminderStyles.badgeText, isUrgentReminder ? reminderStyles.badgeTextUrgent : reminderStyles.badgeTextStandard]}>
+                  {isUrgentReminder ? 'URGENT 2-HOUR APPOINTMENT REMINDER' : '1-DAY APPOINTMENT REMINDER'}
+                </Text>
+              </View>
+
+              <Text style={reminderStyles.title}>{activeReminderModal.title}</Text>
+              <Text style={reminderStyles.message}>{activeReminderModal.message}</Text>
+
+              <View style={reminderStyles.warningBox}>
+                <Text style={reminderStyles.warningText}>
+                  ⚠️ Important: Choosing to ignore this reminder will result in automatic appointment cancellation after a 1-hour waiting time.
+                </Text>
+              </View>
+
+              <View style={reminderStyles.btnCol}>
+                <TouchableOpacity
+                  style={reminderStyles.continueBtn}
+                  activeOpacity={0.88}
+                  disabled={reminderModalBusy}
+                  onPress={handleConfirmReminderAttendance}
+                >
+                  {reminderModalBusy ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
+                      <Text style={reminderStyles.continueBtnText}>Yes, Continue Appointment</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={reminderStyles.cancelBtn}
+                  activeOpacity={0.85}
+                  disabled={reminderModalBusy}
+                  onPress={handleCancelFromReminder}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color="#BA1A1A" />
+                  <Text style={reminderStyles.cancelBtnText}>Cancel Appointment</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
     </NotificationContext.Provider>
   );
 };
+
+const reminderStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(46, 50, 48, 0.58)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.base,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FAF6F0',
+    borderRadius: 24,
+    padding: spacing.lg,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: '#EAE6DE',
+    ...shadows.card,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  badgeUrgent: { backgroundColor: '#FFDAD8' },
+  badgeStandard: { backgroundColor: '#C8E8D0' },
+  badgeText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.4,
+  },
+  badgeTextUrgent: { color: '#690005' },
+  badgeTextStandard: { color: '#2A6038' },
+  title: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.xl,
+    color: colors.textPrimary,
+  },
+  message: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.md,
+    color: colors.textSecondary,
+    lineHeight: 21,
+  },
+  warningBox: {
+    backgroundColor: '#FFF3CD',
+    borderWidth: 1,
+    borderColor: '#F3D68D',
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  warningText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: '#664D03',
+    lineHeight: 19,
+  },
+  btnCol: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  continueBtn: {
+    height: 48,
+    borderRadius: radii.lg,
+    backgroundColor: '#4A7C59',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  continueBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.md,
+    color: colors.white,
+  },
+  cancelBtn: {
+    height: 46,
+    borderRadius: radii.lg,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: '#F2C6C6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  cancelBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.md,
+    color: '#BA1A1A',
+  },
+});
 
 export const useNotification = () => {
   const context = useContext(NotificationContext);

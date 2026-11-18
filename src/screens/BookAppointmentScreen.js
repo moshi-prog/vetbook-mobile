@@ -43,6 +43,7 @@ import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import api from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
+import TimeWindowPicker from '../components/TimeWindowPicker';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -267,6 +268,8 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const [bookedSlots, setBookedSlots]       = useState([]);
   const [fetchingSlots, setFetchingSlots]   = useState(false);
   const [reason, setReason]                 = useState('Diagnostic / Checkup');
+  const [preferredFromTime, setPreferredFromTime] = useState('9:00 AM');
+  const [preferredToTime, setPreferredToTime]     = useState('4:00 PM');
   const [notes, setNotes]                   = useState('');
   const [loading, setLoading]               = useState(false);
   const [fetchingPets, setFetchingPets]     = useState(true);
@@ -478,6 +481,12 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       service_type: reason,
       disallow_same_day: true,
       reason,
+      ...(isSurgery
+        ? {
+            preferred_time_from: preferredFromTime,
+            preferred_time_to: preferredToTime,
+          }
+        : {}),
       notes: notes.trim() || null,
     };
 
@@ -710,7 +719,10 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
           {/* ── 6. Choose Date (Tomorrow Onwards) ─────────────────────── */}
           <View style={styles.section}>
-            <SectionHeading title="Choose Date" right={<Text style={styles.sectionSubHelperInline}>Tomorrow onwards</Text>} />
+            <SectionHeading
+              title={isSurgery ? 'Preferred Surgery Date' : 'Choose Date'}
+              right={<Text style={styles.sectionSubHelperInline}>Tomorrow onwards</Text>}
+            />
             <View style={styles.monthRow}>
               <TouchableOpacity
                 style={styles.monthBtn}
@@ -759,21 +771,38 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                 );
               })}
             </ScrollView>
+            {isSurgery && selectedDate && (
+              <View style={styles.prefDateSummary}>
+                <Ionicons name="calendar-outline" size={14} color="#4A7C59" />
+                <Text style={styles.prefDateSummaryText}>
+                  Preferred Date: {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
+              </View>
+            )}
           </View>
 
-          {/* ── 7. Choose Time (or On-Call Surgery Request) ─────────────── */}
+          {/* ── 7. Choose Time (or On-Call Surgery Window) ─────────────── */}
           <View style={styles.section}>
             <SectionHeading
-              title={isSurgery ? 'On-Call Surgery Request' : 'Choose Time'}
+              title={isSurgery ? 'Preferred Surgery Window' : 'Choose Time'}
               right={!isSurgery && fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
             />
             {isSurgery ? (
-              <View style={styles.surgeryNoticeCard}>
-                <Ionicons name="pulse-outline" size={24} color={colors.primary} />
-                <Text style={styles.surgeryNoticeTitle}>On-Call Surgery Scheduling</Text>
-                <Text style={styles.surgeryNoticeSub}>
-                  Surgery schedules depend on surgeon availability. Submit your preferred date below and our branch staff will send an available time slot for your confirmation in My Appointments.
-                </Text>
+              <View style={{ gap: spacing.md }}>
+                <TimeWindowPicker
+                  title="When would you like your surgery?"
+                  fromTime={preferredFromTime}
+                  toTime={preferredToTime}
+                  onChangeFrom={setPreferredFromTime}
+                  onChangeTo={setPreferredToTime}
+                />
+                <View style={styles.surgeryNoticeCard}>
+                  <Ionicons name="pulse-outline" size={22} color={colors.primary} />
+                  <Text style={styles.surgeryNoticeTitle}>On-Call Surgery Scheduling</Text>
+                  <Text style={styles.surgeryNoticeSub}>
+                    Clinic staff will check surgeon availability for your preferred date ({preferredFromTime} – {preferredToTime}) and send an available slot for your confirmation in My Appointments.
+                  </Text>
+                </View>
               </View>
             ) : (
               <>
@@ -841,12 +870,13 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             )}
 
             <Text style={styles.notesLabel}>
-              Additional Notes <Text style={styles.optional}>(Optional)</Text>
+              {isSurgery ? 'Surgery Notes / Procedure Details' : 'Additional Notes'}{' '}
+              <Text style={styles.optional}>(Optional)</Text>
             </Text>
             <View>
               <TextInput
                 style={styles.notesInput}
-                placeholder={isSurgery ? 'Share any surgical concerns or preferred timing…' : 'Anything the clinic staff should know before the visit…'}
+                placeholder={isSurgery ? 'Describe the surgery type, pet condition, or special requests…' : 'Anything the clinic staff should know before the visit…'}
                 placeholderTextColor={colors.borderDashed}
                 value={notes}
                 onChangeText={setNotes}
@@ -1111,6 +1141,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  prefDateSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E8F5E9',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+  },
+  prefDateSummaryText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: '#2A6038',
   },
   link: {
     fontFamily: fonts.bodySemiBold,

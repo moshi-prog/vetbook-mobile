@@ -43,6 +43,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
+import TimeWindowPicker from '../components/TimeWindowPicker';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
 
@@ -90,6 +91,20 @@ const CANCELLATION_REASONS = [
   "Emergency / Can't make it",
   'Other reason',
 ];
+
+const parseTimeToMinutes = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw.toUpperCase() === 'ON_CALL') return null;
+  const ampm = /^\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*$/i.exec(raw);
+  if (ampm) {
+    let h = Number(ampm[1]) % 12;
+    if (ampm[3].toUpperCase() === 'PM') h += 12;
+    return h * 60 + Number(ampm[2]);
+  }
+  const hm = /^\s*(\d{1,2}):(\d{2})/.exec(raw);
+  if (!hm) return null;
+  return Number(hm[1]) * 60 + Number(hm[2]);
+};
 
 const pad = (n) => String(n).padStart(2, '0');
 const toDateString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -491,7 +506,7 @@ const AppointmentCard = ({
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 const MyAppointmentsScreen = ({ navigation }) => {
-  const { showNotificationBanner, fetchNotifications } = useNotification();
+  const { showNotificationBanner, fetchNotifications, notifications, unreadCount } = useNotification();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -502,6 +517,15 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [cancellingId, setCancellingId] = useState(null);
   const [actionBusyId, setActionBusyId] = useState(null);
   const [branches, setBranches] = useState([]);
+
+  // Surgery Preferred Time Modal state ("Ask for Another Time")
+  const [surgeryPrefModalVisible, setSurgeryPrefModalVisible] = useState(false);
+  const [surgeryPrefAppt, setSurgeryPrefAppt] = useState(null);
+  const [surgeryPrefDate, setSurgeryPrefDate] = useState('');
+  const [surgeryPrefFrom, setSurgeryPrefFrom] = useState('9:00 AM');
+  const [surgeryPrefTo, setSurgeryPrefTo] = useState('4:00 PM');
+  const [surgeryPrefNotes, setSurgeryPrefNotes] = useState('');
+  const [submittingSurgeryPref, setSubmittingSurgeryPref] = useState(false);
 
   // Ticket preview modal state
   const [selectedTicketAppt, setSelectedTicketAppt] = useState(null);
@@ -668,13 +692,22 @@ const MyAppointmentsScreen = ({ navigation }) => {
     } catch (e) {}
   }, []);
 
-  // Refresh whenever the tab is focused (initial load shows the spinner only)
+  // Refresh whenever the tab is focused and poll every 15s while focused
   useFocusEffect(
     useCallback(() => {
       fetchAppointments();
       fetchBranches();
+      const pollId = setInterval(() => {
+        fetchAppointments();
+      }, 15000);
+      return () => clearInterval(pollId);
     }, [fetchAppointments, fetchBranches]),
   );
+
+  // Immediately sync appointment list whenever new notifications / unread count change
+  React.useEffect(() => {
+    fetchAppointments();
+  }, [unreadCount, notifications.length, fetchAppointments]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -687,11 +720,36 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const getFilteredAppointments = () => {
     const allowed = FILTER_STATUSES[activeFilter] ?? [];
     const q = searchQuery.toLowerCase().trim();
+    const now = new Date();
+    const localTodayStr = toDateString(now);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
     const list = appointments.filter((a) => {
-      // Status match
-      const statusMatch = allowed.includes(normStatus(a.status));
+      const st = normStatus(a.status);
+      const statusMatch = allowed.includes(st);
       if (!statusMatch) return false;
+
+      // Exclude completed/cancelled/past-ended appointments from Upcoming / Active
+      if (activeFilter === 'Upcoming / Active') {
+        if (st === 'completed' || st === 'cancelled' || (st !== 'pending' && st !== 'approved')) {
+          return false;
+        }
+        const apptDateStr = String(a.appointment_date ?? '').slice(0, 10);
+        if (apptDateStr) {
+          if (apptDateStr < localTodayStr) {
+            return false;
+          }
+          if (apptDateStr === localTodayStr) {
+            const startMins = parseTimeToMinutes(a.appointment_time);
+            if (startMins !== null) {
+              const durationMins = Number(a.duration_minutes) || 30;
+              if (startMins + durationMins <= nowMinutes) {
+                return false;
+              }
+            }
+          }
+        }
+      }
 
       // Branch match
       if (selectedBranch !== 'All Branches') {
@@ -865,6 +923,19 @@ const MyAppointmentsScreen = ({ navigation }) => {
 
   const handleRespondSurgery = async (appt, action) => {
     if (!appt?.id || actionBusyId) return;
+
+    if (action === 'request_another') {
+      setSelectedTicketAppt(null);
+      setSurgeryPrefAppt(appt);
+      const defaultDate = availableDays[0]?.dateStr || toDateString(new Date(Date.now() + 86400000));
+      setSurgeryPrefDate(defaultDate);
+      setSurgeryPrefFrom('9:00 AM');
+      setSurgeryPrefTo('4:00 PM');
+      setSurgeryPrefNotes('');
+      setSurgeryPrefModalVisible(true);
+      return;
+    }
+
     setActionBusyId(appt.id);
     try {
       const res = await api.respondToSurgerySlot(appt.id, { action });
@@ -875,7 +946,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
       }
       fetchNotifications?.(true);
       showDialog(
-        action === 'accept' ? 'Surgery Schedule Confirmed' : 'Schedule Request Sent',
+        'Surgery Schedule Confirmed',
         res?.data?.message || 'Your response has been sent to clinic staff.',
         'info'
       );
@@ -884,6 +955,34 @@ const MyAppointmentsScreen = ({ navigation }) => {
       showDialog('Notice', msg, 'error');
     } finally {
       setActionBusyId(null);
+    }
+  };
+
+  const handleSubmitSurgeryPreference = async () => {
+    if (!surgeryPrefAppt?.id || submittingSurgeryPref) return;
+    setSubmittingSurgeryPref(true);
+    try {
+      const res = await api.respondToSurgerySlot(surgeryPrefAppt.id, {
+        action: 'request_another',
+        preferred_date: surgeryPrefDate,
+        preferred_time_from: surgeryPrefFrom,
+        preferred_time_to: surgeryPrefTo,
+        preferred_notes: surgeryPrefNotes.trim() || undefined,
+      });
+      setSurgeryPrefModalVisible(false);
+      setSurgeryPrefAppt(null);
+      await fetchAppointments();
+      fetchNotifications?.(true);
+      showDialog(
+        'Preferred Surgery Schedule Sent',
+        res?.data?.message || 'Your new preferred date and time window have been sent to clinic staff.',
+        'info'
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not submit preferred surgery schedule.';
+      showDialog('Notice', msg, 'error');
+    } finally {
+      setSubmittingSurgeryPref(false);
     }
   };
 
@@ -1498,6 +1597,122 @@ const MyAppointmentsScreen = ({ navigation }) => {
             );
           })()}
         </View>
+      </Modal>
+
+      {/* ── Surgery Preferred Date & Time Window Modal ────────────────────── */}
+      <Modal
+        visible={surgeryPrefModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !submittingSurgeryPref && setSurgeryPrefModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Request Another Surgery Time</Text>
+                <Text style={styles.modalSub}>
+                  {surgeryPrefAppt?.pet?.name ?? 'Pet'} • {surgeryPrefAppt?.branch ?? 'Clinic'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => !submittingSurgeryPref && setSurgeryPrefModalVisible(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <Text style={styles.modalSectionLabel}>PREFERRED SURGERY DATE</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+                {availableDays.map((d) => {
+                  const selected = surgeryPrefDate === d.dateStr;
+                  return (
+                    <TouchableOpacity
+                      key={d.dateStr}
+                      style={[
+                        {
+                          width: 58,
+                          paddingVertical: 10,
+                          borderRadius: 14,
+                          borderWidth: 1.5,
+                          borderColor: selected ? '#4A7C59' : '#EAE6DE',
+                          backgroundColor: selected ? '#4A7C59' : '#FFFFFF',
+                          alignItems: 'center',
+                        },
+                      ]}
+                      onPress={() => setSurgeryPrefDate(d.dateStr)}
+                    >
+                      <Text style={{ fontSize: 11, color: selected ? '#FFFFFF' : '#6B6358', fontFamily: fonts.bodySemiBold }}>
+                        {d.dayName}
+                      </Text>
+                      <Text style={{ fontSize: 16, color: selected ? '#FFFFFF' : '#2E3230', fontFamily: fonts.bodyBold }}>
+                        {d.dayNum}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: selected ? '#FFFFFF' : '#6B6358' }}>
+                        {d.monthName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <TimeWindowPicker
+                title="When would you like your surgery?"
+                fromTime={surgeryPrefFrom}
+                toTime={surgeryPrefTo}
+                onChangeFrom={setSurgeryPrefFrom}
+                onChangeTo={setSurgeryPrefTo}
+              />
+
+              <Text style={[styles.modalSectionLabel, { marginTop: spacing.md }]}>NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={{
+                  backgroundColor: '#FAF6F0',
+                  borderWidth: 1,
+                  borderColor: '#D5CFC2',
+                  borderRadius: 14,
+                  padding: 12,
+                  minHeight: 72,
+                  color: colors.textPrimary,
+                  fontFamily: fonts.bodyRegular,
+                  textAlignVertical: 'top',
+                }}
+                placeholder="Share any preferred details or notes for clinic staff..."
+                placeholderTextColor={colors.textTertiary}
+                value={surgeryPrefNotes}
+                onChangeText={setSurgeryPrefNotes}
+                multiline
+                maxLength={400}
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                disabled={submittingSurgeryPref}
+                onPress={() => setSurgeryPrefModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSaveBtn}
+                disabled={submittingSurgeryPref}
+                onPress={handleSubmitSurgeryPreference}
+              >
+                {submittingSurgeryPref ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSaveText}>Send Preference</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Themed Custom Dialog / Alert */}
