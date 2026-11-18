@@ -186,6 +186,11 @@ const LoginScreen = ({ navigation }) => {
           ]
         );
         return;
+      } else if (result.pendingStaffApproval) {
+        const msg = result.error || 'Your account is awaiting approval by Clinic Staff.';
+        setErrorMessage(msg);
+        Alert.alert('Awaiting Staff Approval', msg);
+        return;
       } else {
         const msg = result.error || 'Invalid email or password.';
         setErrorMessage(msg);

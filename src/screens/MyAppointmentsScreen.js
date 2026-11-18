@@ -99,7 +99,7 @@ const getNextDays = (count = 14) => {
   const start = new Date();
   for (let i = 0; i < count; i++) {
     const d = new Date(start);
-    d.setDate(start.getDate() + i);
+    d.setDate(start.getDate() + i + 1);
     days.push({
       dateStr: toDateString(d),
       dayName: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()],
@@ -127,10 +127,11 @@ const formatDate = (value) => {
     : 'Date TBD';
 };
 
-/** '14:30' | '14:30:00' | '2:30 PM' → '2:30 PM' */
+/** '14:30' | '14:30:00' | '2:30 PM' | 'ON_CALL' → '2:30 PM' */
 const formatTime = (value) => {
   const raw = String(value ?? '').trim();
   if (!raw) return 'Time TBD';
+  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call (Staff Schedules)';
   if (/(?:am|pm)\s*$/i.test(raw)) return raw;
   const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
@@ -234,14 +235,75 @@ const findBranchMatch = (branches, branchName) => {
   return matched || DEFAULT_BRANCH_HOURS;
 };
 
+// ─── On-Call Surgery Proposal Banner ─────────────────────────────────────────
+
+const SurgeryProposalBanner = ({ appt, busy, onRespond }) => {
+  if (!appt || appt.surgery_status !== 'slot_proposed') return null;
+  const proposedDate = appt.proposed_date || appt.appointment_date;
+  const proposedTime = appt.proposed_time || appt.appointment_time;
+
+  return (
+    <View style={styles.surgeryProposalBanner}>
+      <View style={styles.bannerHeaderRow}>
+        <Ionicons name="pulse-outline" size={16} color="#1D4ED8" />
+        <Text style={styles.surgeryProposalTitle}>Clinic Staff Proposed a Surgery Schedule</Text>
+      </View>
+      <Text style={styles.surgeryProposalSub}>
+        Proposed slot: {formatDate(proposedDate)} • {formatTime(proposedTime)}
+      </Text>
+      <View style={styles.bannerBtnsRow}>
+        <TouchableOpacity
+          style={styles.bannerPrimaryBtn}
+          disabled={busy}
+          activeOpacity={0.85}
+          onPress={() => onRespond?.(appt, 'accept')}
+        >
+          <Text style={styles.bannerPrimaryBtnText}>Proceed with This Schedule</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bannerSecondaryBtn}
+          disabled={busy}
+          activeOpacity={0.85}
+          onPress={() => onRespond?.(appt, 'request_another')}
+        >
+          <Text style={styles.bannerSecondaryBtnText}>Ask for Another Time</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
 // ─── Appointment card ────────────────────────────────────────────────────────
 
-const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
+const AppointmentCard = ({
+  appt,
+  busy,
+  actionBusy,
+  onView,
+  onReschedule,
+  onCancel,
+  onConfirmAttendance,
+  onRespondSurgery,
+}) => {
   const status = normStatus(appt.status);
   const sc = getStatusColor(status);
   const isUpcoming = status === 'pending' || status === 'approved';
   const pet = appt.pet ?? {};
   const [petAvatarError, setPetAvatarError] = useState(false);
+
+  const isWithin24Hours = React.useMemo(() => {
+    if (!appt.appointment_date) return false;
+    const d = parseLocalDate(appt.appointment_date);
+    if (!d) return false;
+    const diffHours = (d.getTime() - Date.now()) / (1000 * 60 * 60);
+    return diffHours <= 36 && diffHours >= -24;
+  }, [appt.appointment_date]);
+
+  const needsAttendancePrompt =
+    isUpcoming &&
+    !appt.attendance_confirmed_at &&
+    appt.surgery_status !== 'slot_proposed' &&
+    (Boolean(appt.reminder_24h_sent_at) || Boolean(appt.reminder_3h_sent_at) || isWithin24Hours);
 
   React.useEffect(() => {
     setPetAvatarError(false);
@@ -322,6 +384,53 @@ const AppointmentCard = ({ appt, busy, onView, onReschedule, onCancel }) => {
           )}
         </View>
 
+        {isUpcoming && Boolean(appt.attendance_confirmed_at) && (
+          <View style={styles.confirmedAttendanceBadge}>
+            <Ionicons name="checkmark-circle" size={14} color="#2A6038" />
+            <Text style={styles.confirmedAttendanceText}>Confirmed Attendance</Text>
+          </View>
+        )}
+
+        {isUpcoming && appt.surgery_status === 'awaiting_slot' && (
+          <View style={styles.surgeryWaitingBanner}>
+            <Ionicons name="time-outline" size={15} color="#705C30" />
+            <Text style={styles.surgeryWaitingText}>
+              On-Call Surgery Request • Branch staff will propose an available surgical time slot shortly.
+            </Text>
+          </View>
+        )}
+
+        {isUpcoming && (
+          <SurgeryProposalBanner appt={appt} busy={actionBusy} onRespond={onRespondSurgery} />
+        )}
+
+        {needsAttendancePrompt && (
+          <View style={styles.reminderPromptBanner}>
+            <View style={styles.bannerHeaderRow}>
+              <Ionicons name="notifications-outline" size={16} color="#705C30" />
+              <Text style={styles.reminderPromptTitle}>Reminder: Will your appointment still continue?</Text>
+            </View>
+            <View style={styles.bannerBtnsRow}>
+              <TouchableOpacity
+                style={styles.bannerPrimaryBtn}
+                disabled={actionBusy}
+                activeOpacity={0.85}
+                onPress={() => onConfirmAttendance?.(appt)}
+              >
+                <Text style={styles.bannerPrimaryBtnText}>Yes, I'll Continue</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bannerSecondaryBtn}
+                disabled={actionBusy}
+                activeOpacity={0.85}
+                onPress={() => onReschedule(appt.id)}
+              >
+                <Text style={styles.bannerSecondaryBtnText}>Cancel / Reschedule</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {status === 'cancelled' && (
           <View style={styles.cancelReasonBanner}>
             <Ionicons name="alert-circle-outline" size={15} color={colors.alertRed} />
@@ -391,6 +500,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [selectedBranch, setSelectedBranch] = useState('All Branches');
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState(null);
+  const [actionBusyId, setActionBusyId] = useState(null);
   const [branches, setBranches] = useState([]);
 
   // Ticket preview modal state
@@ -419,7 +529,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.getBookedSlots(reschedulingAppt.branch, selectedRescheduleDate);
+        const res = await api.getBookedSlots(
+          reschedulingAppt.branch,
+          selectedRescheduleDate,
+          reschedulingAppt.service_type || reschedulingAppt.reason
+        );
         if (!cancelled) {
           setReschedBookedSlots(res.data?.booked_slots || []);
         }
@@ -729,6 +843,50 @@ const MyAppointmentsScreen = ({ navigation }) => {
     }
   };
 
+  const handleConfirmAttendance = async (appt) => {
+    if (!appt?.id || actionBusyId) return;
+    setActionBusyId(appt.id);
+    try {
+      await api.confirmAppointmentAttendance(appt.id);
+      await fetchAppointments();
+      fetchNotifications?.(true);
+      showDialog(
+        'Confirmed Attendance',
+        'Thank you! Clinic staff has been notified that you will attend this appointment.',
+        'info'
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not confirm attendance.';
+      showDialog('Notice', msg, 'error');
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleRespondSurgery = async (appt, action) => {
+    if (!appt?.id || actionBusyId) return;
+    setActionBusyId(appt.id);
+    try {
+      const res = await api.respondToSurgerySlot(appt.id, { action });
+      const updated = res?.data?.appointment;
+      await fetchAppointments();
+      if (updated && selectedTicketAppt?.id === appt.id) {
+        setSelectedTicketAppt(updated);
+      }
+      fetchNotifications?.(true);
+      showDialog(
+        action === 'accept' ? 'Surgery Schedule Confirmed' : 'Schedule Request Sent',
+        res?.data?.message || 'Your response has been sent to clinic staff.',
+        'info'
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not update surgery response.';
+      showDialog('Notice', msg, 'error');
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
   const goBook = () => navigation.navigate('BookAppointment');
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -892,9 +1050,12 @@ const MyAppointmentsScreen = ({ navigation }) => {
                   key={appt.id}
                   appt={appt}
                   busy={cancellingId === appt.id}
+                  actionBusy={actionBusyId === appt.id}
                   onView={handleView}
                   onReschedule={handleReschedule}
                   onCancel={handleCancel}
+                  onConfirmAttendance={handleConfirmAttendance}
+                  onRespondSurgery={handleRespondSurgery}
                 />
               ))}
         </ScrollView>
@@ -1270,6 +1431,14 @@ const MyAppointmentsScreen = ({ navigation }) => {
                         </Text>
                       </View>
                     </View>
+
+                    {ticketIsUpcoming && (
+                      <SurgeryProposalBanner
+                        appt={selectedTicketAppt}
+                        busy={actionBusyId === selectedTicketAppt.id}
+                        onRespond={handleRespondSurgery}
+                      />
+                    )}
 
                     {ticketStatus === 'cancelled' ? (
                       <View style={styles.cancelReasonBanner}>
@@ -1662,6 +1831,116 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 17,
     color: '#C62828',
+  },
+  confirmedAttendanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#C8E8D0',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  confirmedAttendanceText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    color: '#2A6038',
+  },
+  surgeryWaitingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF8E6',
+    borderWidth: 1,
+    borderColor: '#F3D68D',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  surgeryWaitingText: {
+    flex: 1,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: '#705C30',
+    lineHeight: 17,
+  },
+  surgeryProposalBanner: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    gap: 6,
+  },
+  surgeryProposalTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: '#1E40AF',
+    flex: 1,
+  },
+  surgeryProposalSub: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: '#1E3A8A',
+  },
+  reminderPromptBanner: {
+    backgroundColor: '#FFF8E6',
+    borderWidth: 1,
+    borderColor: '#F3D68D',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    gap: 8,
+  },
+  reminderPromptTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: '#705C30',
+    flex: 1,
+  },
+  bannerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bannerBtnsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  bannerPrimaryBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerPrimaryBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    color: colors.white,
+  },
+  bannerSecondaryBtn: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: '#D5CFC2',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerSecondaryBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.textPrimary,
   },
 
   // Actions

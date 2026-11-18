@@ -79,7 +79,17 @@ const DEFAULT_BRANCHES = [
   },
 ];
 
-const REASONS = ['Checkup', 'Vaccination', 'Grooming', 'Deworming', 'Emergency'];
+const SERVICES = [
+  { id: 'Diagnostic / Checkup', label: 'Diagnostic / Checkup', durationLabel: '15–30 mins', mins: 30, icon: 'medkit-outline' },
+  { id: 'Vaccination', label: 'Vaccination', durationLabel: '15–30 mins', mins: 30, icon: 'shield-checkmark-outline' },
+  { id: 'Grooming', label: 'Grooming', durationLabel: '2 Hours (3:00 PM cut-off)', mins: 120, cutoff: '15:00', icon: 'cut-outline' },
+  { id: 'Surgery', label: 'Surgery (On-Call)', durationLabel: 'On-Call • Staff Schedules Slot', mins: 60, isSurgery: true, icon: 'pulse-outline' },
+];
+
+const BRANCH_STAFF_META = {
+  'Mabini Branch': '1 Groomer • 1 Veterinarian',
+  'Batangas City Branch': '3 Groomers • 2 Veterinarians (Supports simultaneous bookings)',
+};
 
 const STEPS = ['Select Pet', 'Date', 'Time', 'Confirm'];
 
@@ -88,7 +98,6 @@ const MAX_DAYS      = 56;
 const DATE_CARD_W   = 56;
 const DATE_GAP      = spacing.sm;
 const NOTES_MAX     = 200;
-const EST_DURATION  = 'Est. 45 min';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -120,11 +129,11 @@ const formatSlot = (slot) => {
   return `${hour12}:${pad(m)} ${suffix}`;
 };
 
-/** Next `count` days starting today. Checks branch Saturday/Sunday status. */
+/** Next `count` days starting tomorrow (no same-day booking). Checks branch Saturday/Sunday status. */
 const generateDates = (count, branch) => {
   const today = new Date();
   return Array.from({ length: count }, (_, i) => {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i + 1);
     const dayOfWeek = date.getDay();
     const isSunday = dayOfWeek === 0;
     const isSaturday = dayOfWeek === 6;
@@ -251,14 +260,13 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   // ── State ──────────────────────────────────────────────────────────────────
   const [pets, setPets]                     = useState([]);
   const [branches, setBranches]             = useState(() => DEFAULT_BRANCHES.map((b) => buildBranchCard(b)));
-  const [selectedPetId, setSelectedPetId]   = useState(preselectedPetId || null);
-  const [selectedPet, setSelectedPet]       = useState(preselectedPet || null);
+  const [selectedPets, setSelectedPets]     = useState(() => (preselectedPet ? [preselectedPet] : []));
   const [selectedBranch, setSelectedBranch] = useState('Mabini Branch');
   const [selectedDate, setSelectedDate]     = useState(null);
   const [selectedTime, setSelectedTime]     = useState(null);
   const [bookedSlots, setBookedSlots]       = useState([]);
   const [fetchingSlots, setFetchingSlots]   = useState(false);
-  const [reason, setReason]                 = useState('Checkup');
+  const [reason, setReason]                 = useState('Diagnostic / Checkup');
   const [notes, setNotes]                   = useState('');
   const [loading, setLoading]               = useState(false);
   const [fetchingPets, setFetchingPets]     = useState(true);
@@ -302,8 +310,9 @@ const BookAppointmentScreen = ({ route, navigation }) => {
         if (preselectedPetId) {
           const match = list.find((p) => String(p.id) === String(preselectedPetId));
           if (match) {
-            setSelectedPetId(match.id);
-            setSelectedPet(match);
+            setSelectedPets((prev) =>
+              prev.some((p) => String(p.id) === String(match.id)) ? prev : [...prev, match]
+            );
           }
         }
       } catch (err) {
@@ -319,6 +328,9 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const branchObj = branches.find((b) => b.name === selectedBranch) || branches[0];
+  const selectedService = SERVICES.find((s) => s.id === reason) || SERVICES[0];
+  const isSurgery = !!selectedService.isSurgery;
+  const isGrooming = reason === 'Grooming';
 
   const dates = generateDates(daysCount, branchObj);
 
@@ -327,9 +339,9 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     return generateTimeSlots(branchObj, selectedDate);
   }, [branchObj, selectedDate]);
 
-  // ── Fetch live booked slots when branch or date changes ────────────────────
+  // ── Fetch live booked slots when branch, date, or service changes ─────────
   useEffect(() => {
-    if (!selectedBranch || !selectedDate) {
+    if (!selectedBranch || !selectedDate || isSurgery) {
       setBookedSlots([]);
       return;
     }
@@ -338,7 +350,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     (async () => {
       try {
         const dateStr = toDateString(selectedDate);
-        const res = await api.getBookedSlots(selectedBranch, dateStr);
+        const res = await api.getBookedSlots(selectedBranch, dateStr, reason);
         if (!cancelled) {
           setBookedSlots(res.data?.booked_slots || []);
         }
@@ -349,17 +361,31 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedBranch, selectedDate]);
+  }, [selectedBranch, selectedDate, reason, isSurgery]);
 
-  // Reset selectedTime if it becomes invalid under new operating hours or booked slots
+  const isSlotBlockedForService = React.useCallback((slot) => {
+    if (bookedSlots.includes(slot)) return true;
+    if (!isGrooming) return false;
+    const mins = parseTimeToMinutes(slot);
+    if (mins === null) return false;
+    if (mins > 15 * 60) return true; // 3:00 PM cut-off for 2-hr grooming
+    if (mins >= 10 * 60 + 30 && mins < 12 * 60) return true; // Overlaps 12:00-1:00 PM lunch
+    return false;
+  }, [bookedSlots, isGrooming]);
+
+  // Reset selectedTime if it becomes invalid under new operating hours, service rules, or booked slots
   useEffect(() => {
-    if (selectedTime && (!availableSlots.includes(selectedTime) || bookedSlots.includes(selectedTime))) {
+    if (isSurgery) {
+      if (selectedTime !== null) setSelectedTime(null);
+      return;
+    }
+    if (selectedTime && (!availableSlots.includes(selectedTime) || isSlotBlockedForService(selectedTime))) {
       setSelectedTime(null);
     }
-  }, [availableSlots, bookedSlots, selectedTime]);
+  }, [availableSlots, isSlotBlockedForService, isSurgery, selectedTime]);
 
   // Progress: first incomplete step is the "current" one
-  const currentStep = !selectedPetId ? 1 : !selectedDate ? 2 : !selectedTime ? 3 : 4;
+  const currentStep = selectedPets.length === 0 ? 1 : !selectedDate ? 2 : (!isSurgery && !selectedTime) ? 3 : 4;
 
   const now = new Date();
   const isSlotPast = (slot) => {
@@ -375,13 +401,10 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleSelectPet = (pet) => {
-    if (String(selectedPetId) === String(pet.id)) {
-      setSelectedPetId(null);
-      setSelectedPet(null);
-    } else {
-      setSelectedPetId(pet.id);
-      setSelectedPet(pet);
-    }
+    setSelectedPets((prev) => {
+      const exists = prev.some((p) => String(p.id) === String(pet.id));
+      return exists ? prev.filter((p) => String(p.id) !== String(pet.id)) : [...prev, pet];
+    });
   };
 
   const handleSelectDate = (item) => {
@@ -417,13 +440,15 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     if (idx !== visibleDateIdx) setVisibleDateIdx(idx);
   };
 
-  const finishBooking = (appointment) => {
+  const finishBooking = (appointment, allAppointments) => {
     navigation.replace('AppointmentConfirmation', {
       appointment,
-      pet: selectedPet,
+      appointments: allAppointments,
+      pet: selectedPets[0] ?? null,
+      pets: selectedPets,
       branch: selectedBranch,
       date: toDateString(selectedDate),
-      time: selectedTime,
+      time: isSurgery ? 'ON_CALL' : selectedTime,
       reason,
     });
   };
@@ -431,24 +456,27 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const handleSubmit = async () => {
     if (loading) return;
 
-    if (!selectedPetId) {
-      Alert.alert('Select a pet', 'Please choose which pet this appointment is for.');
+    if (selectedPets.length === 0) {
+      Alert.alert('Select pet(s)', 'Please choose one or more pets for this appointment.');
       return;
     }
     if (!selectedDate) {
-      Alert.alert('Choose a date', 'Please pick an appointment date.');
+      Alert.alert('Choose a date', 'Please pick an appointment date (tomorrow onwards).');
       return;
     }
-    if (!selectedTime) {
+    if (!isSurgery && !selectedTime) {
       Alert.alert('Choose a time', 'Please pick an available time slot.');
       return;
     }
 
     const payload = {
-      pet_id: selectedPetId,
+      pet_ids: selectedPets.map((p) => p.id),
+      pet_id: selectedPets[0].id,
       branch: selectedBranch,
       appointment_date: toDateString(selectedDate),
-      appointment_time: selectedTime,
+      appointment_time: isSurgery ? 'ON_CALL' : selectedTime,
+      service_type: reason,
+      disallow_same_day: true,
       reason,
       notes: notes.trim() || null,
     };
@@ -457,14 +485,17 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     try {
       const res = await api.createAppointment(payload);
       const appointment = res?.data?.appointment ?? res?.data ?? payload;
+      const allAppointments = res?.data?.appointments ?? [appointment];
       showNotificationBanner({
-        title: 'Appointment Booked',
-        message: 'Your booking has been received and is pending clinic review.',
+        title: isSurgery ? 'Surgery Request Sent' : 'Appointment Booked',
+        message: isSurgery
+          ? 'Branch staff will review surgeon availability and send a proposed schedule.'
+          : 'Your booking has been received and is pending clinic review.',
         type: 'appointment',
         appointmentId: appointment?.id,
       });
       fetchNotifications(true);
-      finishBooking(appointment);
+      finishBooking(appointment, allAppointments);
     } catch (err) {
       const data = err?.response?.data;
       let msg = data?.message ?? err?.message ?? 'Something went wrong. Please try again.';
@@ -542,7 +573,15 @@ const BookAppointmentScreen = ({ route, navigation }) => {
 
           {/* ── 3. Select Pet ─────────────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionHeading title="Select Pet" />
+            <SectionHeading
+              title="Select Pet"
+              right={
+                selectedPets.length > 0 ? (
+                  <Text style={styles.link}>{selectedPets.length} selected</Text>
+                ) : null
+              }
+            />
+            <Text style={styles.sectionSubHelper}>Tap one or more pets to book together</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -566,7 +605,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                 </View>
               ) : (
                 pets.map((pet) => {
-                  const isSelected = String(selectedPetId) === String(pet.id);
+                  const isSelected = selectedPets.some((p) => String(p.id) === String(pet.id));
                   return (
                     <TouchableOpacity
                       key={pet.id}
@@ -622,6 +661,11 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                         <Ionicons name="location-outline" size={12} color={colors.textMuted} />
                         <Text style={styles.branchAddr}>{b.address}</Text>
                       </View>
+                      {BRANCH_STAFF_META[b.name] ? (
+                        <Text style={styles.branchStaffMeta}>
+                          {BRANCH_STAFF_META[b.name]}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                   <View style={styles.branchFooter}>
@@ -635,9 +679,38 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             })}
           </View>
 
-          {/* ── 5. Choose Date ────────────────────────────────────────── */}
+          {/* ── 5. Service Selection ──────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionHeading title="Choose Date" />
+            <SectionHeading title="Select Service" />
+            <View style={styles.serviceGrid}>
+              {SERVICES.map((svc) => {
+                const isActive = reason === svc.id;
+                return (
+                  <TouchableOpacity
+                    key={svc.id}
+                    style={[styles.serviceCard, isActive && styles.serviceCardActive]}
+                    activeOpacity={0.85}
+                    onPress={() => setReason(svc.id)}
+                    accessibilityLabel={`Service ${svc.label}`}
+                  >
+                    <View style={[styles.serviceIconWrap, isActive && styles.serviceIconWrapActive]}>
+                      <Ionicons name={svc.icon} size={18} color={isActive ? colors.white : colors.primary} />
+                    </View>
+                    <Text style={[styles.serviceLabel, isActive && styles.serviceLabelActive]}>
+                      {svc.label}
+                    </Text>
+                    <Text style={[styles.serviceDur, isActive && styles.serviceDurActive]}>
+                      {svc.durationLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* ── 6. Choose Date (Tomorrow Onwards) ─────────────────────── */}
+          <View style={styles.section}>
+            <SectionHeading title="Choose Date" right={<Text style={styles.sectionSubHelperInline}>Tomorrow onwards</Text>} />
             <View style={styles.monthRow}>
               <TouchableOpacity
                 style={styles.monthBtn}
@@ -688,103 +761,84 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             </ScrollView>
           </View>
 
-          {/* ── 6. Choose Time ────────────────────────────────────────── */}
+          {/* ── 7. Choose Time (or On-Call Surgery Request) ─────────────── */}
           <View style={styles.section}>
             <SectionHeading
-              title="Choose Time"
-              right={fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              title={isSurgery ? 'On-Call Surgery Request' : 'Choose Time'}
+              right={!isSurgery && fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
             />
-            {isClinicClosed ? (
-              <View style={styles.closedCard}>
-                <Ionicons name="calendar-outline" size={24} color="#BA1A1A" />
-                <Text style={styles.closedTitle}>Clinic Closed on this day</Text>
-                <Text style={styles.closedSub}>
-                  {selectedBranch} is closed on this day. Please select another date.
-                </Text>
-              </View>
-            ) : availableSlots.length === 0 ? (
-              <View style={styles.closedCard}>
-                <Ionicons name="time-outline" size={24} color={colors.textSecondary} />
-                <Text style={styles.closedTitle}>No Slots Available</Text>
-                <Text style={styles.closedSub}>
-                  Please choose a date to see operating hours and available time slots.
+            {isSurgery ? (
+              <View style={styles.surgeryNoticeCard}>
+                <Ionicons name="pulse-outline" size={24} color={colors.primary} />
+                <Text style={styles.surgeryNoticeTitle}>On-Call Surgery Scheduling</Text>
+                <Text style={styles.surgeryNoticeSub}>
+                  Surgery schedules depend on surgeon availability. Submit your preferred date below and our branch staff will send an available time slot for your confirmation in My Appointments.
                 </Text>
               </View>
             ) : (
-              <View style={styles.timeGrid}>
-                {availableSlots.map((slot) => {
-                  const booked = bookedSlots.includes(slot);
-                  const past = isSlotPast(slot);
-                  const disabled = booked || past;
-                  const isSelected = selectedTime === slot && !disabled;
-                  return (
-                    <TouchableOpacity
-                      key={slot}
-                      style={[
-                        styles.timeSlot,
-                        isSelected && styles.timeSlotSelected,
-                        disabled && styles.timeSlotDisabled,
-                      ]}
-                      activeOpacity={0.85}
-                      disabled={disabled}
-                      onPress={() => handleSelectTime(slot)}
-                      accessibilityLabel={`${formatSlot(slot)}${booked ? ', booked' : ''}`}
-                    >
-                      {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                      <Text
-                        style={[
-                          styles.timeText,
-                          isSelected && styles.timeTextSelected,
-                          disabled && styles.timeTextDisabled,
-                          booked && styles.timeTextBooked,
-                        ]}
-                      >
-                        {formatSlot(slot)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-
-          {/* ── 7. Reason for Visit ───────────────────────────────────── */}
-          <View style={styles.section}>
-            <SectionHeading title="Reason for Visit" />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-            >
-              {REASONS.map((r) => {
-                const isActive = reason === r;
-                const isEmergency = r === 'Emergency';
-                return (
-                  <TouchableOpacity
-                    key={r}
-                    style={[
-                      styles.chip,
-                      isEmergency && styles.chipEmergency,
-                      isActive && (isEmergency ? styles.chipEmergencyActive : styles.chipActive),
-                    ]}
-                    activeOpacity={0.85}
-                    onPress={() => setReason(r)}
-                    accessibilityLabel={`Reason ${r}`}
-                  >
-                    {isActive && <Ionicons name="checkmark" size={13} color={colors.white} />}
-                    <Text
-                      style={[
-                        styles.chipText,
-                        isEmergency && styles.chipTextEmergency,
-                        isActive && styles.chipTextActive,
-                      ]}
-                    >
-                      {r}
+              <>
+                {isGrooming && (
+                  <View style={styles.groomingNoteCard}>
+                    <Ionicons name="information-circle-outline" size={16} color="#705C30" />
+                    <Text style={styles.groomingNoteText}>
+                      Grooming takes 2 hours. Last booking slot is 3:00 PM.
                     </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                  </View>
+                )}
+                {isClinicClosed ? (
+                  <View style={styles.closedCard}>
+                    <Ionicons name="calendar-outline" size={24} color="#BA1A1A" />
+                    <Text style={styles.closedTitle}>Clinic Closed on this day</Text>
+                    <Text style={styles.closedSub}>
+                      {selectedBranch} is closed on this day. Please select another date.
+                    </Text>
+                  </View>
+                ) : availableSlots.length === 0 ? (
+                  <View style={styles.closedCard}>
+                    <Ionicons name="time-outline" size={24} color={colors.textSecondary} />
+                    <Text style={styles.closedTitle}>No Slots Available</Text>
+                    <Text style={styles.closedSub}>
+                      Please choose a date to see operating hours and available time slots.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.timeGrid}>
+                    {availableSlots.map((slot) => {
+                      const blocked = isSlotBlockedForService(slot);
+                      const past = isSlotPast(slot);
+                      const disabled = blocked || past;
+                      const isSelected = selectedTime === slot && !disabled;
+                      return (
+                        <TouchableOpacity
+                          key={slot}
+                          style={[
+                            styles.timeSlot,
+                            isSelected && styles.timeSlotSelected,
+                            disabled && styles.timeSlotDisabled,
+                          ]}
+                          activeOpacity={0.85}
+                          disabled={disabled}
+                          onPress={() => handleSelectTime(slot)}
+                          accessibilityLabel={`${formatSlot(slot)}${blocked ? ', unavailable' : ''}`}
+                        >
+                          {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                          <Text
+                            style={[
+                              styles.timeText,
+                              isSelected && styles.timeTextSelected,
+                              disabled && styles.timeTextDisabled,
+                              blocked && styles.timeTextBooked,
+                            ]}
+                          >
+                            {formatSlot(slot)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            )}
 
             <Text style={styles.notesLabel}>
               Additional Notes <Text style={styles.optional}>(Optional)</Text>
@@ -792,7 +846,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             <View>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Anything the clinic staff should know before the visit…"
+                placeholder={isSurgery ? 'Share any surgical concerns or preferred timing…' : 'Anything the clinic staff should know before the visit…'}
                 placeholderTextColor={colors.borderDashed}
                 value={notes}
                 onChangeText={setNotes}
@@ -811,8 +865,8 @@ const BookAppointmentScreen = ({ route, navigation }) => {
           <View style={styles.bottomBar}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryLeft}>
-                {selectedPet ? (
-                  <PetAvatar pet={selectedPet} size={32} />
+                {selectedPets[0] ? (
+                  <PetAvatar pet={selectedPets[0]} size={32} />
                 ) : (
                   <View style={[styles.summaryEmptyAvatar]}>
                     <Ionicons name="paw-outline" size={16} color={colors.borderDashed} />
@@ -820,14 +874,20 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                 )}
                 <View style={styles.summaryText}>
                   <Text style={styles.summaryPet} numberOfLines={1}>
-                    {selectedPet?.name ?? 'No pet selected'}
+                    {selectedPets.length === 0
+                      ? 'No pet selected'
+                      : selectedPets.length === 1
+                      ? selectedPets[0].name
+                      : `${selectedPets.length} Pets (${selectedPets.map((p) => p.name).join(', ')})`}
                   </Text>
-                  <Text style={styles.summaryBranch} numberOfLines={1}>{selectedBranch}</Text>
+                  <Text style={styles.summaryBranch} numberOfLines={1}>
+                    {selectedBranch} • {selectedService.label}
+                  </Text>
                 </View>
               </View>
               <View style={styles.summaryRight}>
                 <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-                <Text style={styles.summaryEst}>{EST_DURATION}</Text>
+                <Text style={styles.summaryEst}>{selectedService.durationLabel}</Text>
               </View>
             </View>
 
@@ -949,6 +1009,108 @@ const styles = StyleSheet.create({
     fontFamily: fonts.headingBold,
     fontSize: fontSizes.xl,
     color: colors.textPrimary,
+  },
+  sectionSubHelper: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    marginTop: -spacing.sm,
+  },
+  sectionSubHelperInline: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.primary,
+  },
+  branchStaffMeta: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.primary,
+    marginTop: 4,
+  },
+  serviceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  serviceCard: {
+    width: '48.5%',
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 4,
+    ...shadows.soft,
+  },
+  serviceCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  serviceIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryPale,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  serviceIconWrapActive: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  serviceLabel: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.body,
+    color: colors.textPrimary,
+  },
+  serviceLabelActive: {
+    color: colors.white,
+  },
+  serviceDur: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+  },
+  serviceDurActive: {
+    color: 'rgba(255,255,255,0.9)',
+  },
+  groomingNoteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF8E6',
+    borderWidth: 1,
+    borderColor: '#F3D68D',
+    borderRadius: radii.md,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+  },
+  groomingNoteText: {
+    flex: 1,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: '#705C30',
+  },
+  surgeryNoticeCard: {
+    backgroundColor: '#F2F7F4',
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    borderRadius: radii.xl,
+    padding: spacing.base,
+    alignItems: 'center',
+    gap: 6,
+  },
+  surgeryNoticeTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.md,
+    color: colors.primary,
+  },
+  surgeryNoticeSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 19,
   },
   link: {
     fontFamily: fonts.bodySemiBold,

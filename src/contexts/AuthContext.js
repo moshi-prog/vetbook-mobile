@@ -114,9 +114,15 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setError(null);
     try {
-      const response = await api.login({ email, password });
+      const response = await api.login({ email, password, enforce_staff_approval: true });
       const newToken = response.data?.token;
       const newUser = response.data?.user ?? response.data;
+
+      if (response.data?.pending_staff_approval || newUser?.approval_status === 'pending') {
+        const msg = 'Your account is awaiting approval by Clinic Staff. You will be able to sign in once staff verifies your account.';
+        setError(msg);
+        return { success: false, pendingStaffApproval: true, error: msg };
+      }
 
       if (newToken && newUser) {
         await storage.saveToken(newToken);
@@ -127,6 +133,11 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, error: 'Invalid response from server' };
     } catch (err) {
+      if (err.response?.status === 403 && err.response?.data?.pending_staff_approval) {
+        const msg = 'Your account is awaiting approval by Clinic Staff. You will be able to sign in once staff verifies your account.';
+        setError(msg);
+        return { success: false, pendingStaffApproval: true, error: msg };
+      }
       if (err.response?.status === 403 && err.response?.data?.needs_verification) {
         return {
           success: false,
@@ -151,6 +162,14 @@ export const AuthProvider = ({ children }) => {
       const response = await api.verifyEmail(email, code);
       const newToken = response.data?.token;
       const newUser = response.data?.user ?? response.data;
+
+      if (response.data?.pending_staff_approval || newUser?.approval_status === 'pending') {
+        return {
+          success: true,
+          pendingStaffApproval: true,
+          message: 'Email verified! Your registration is now awaiting approval by Clinic Staff before you can sign in.',
+        };
+      }
 
       if (newToken && newUser) {
         await storage.saveToken(newToken);

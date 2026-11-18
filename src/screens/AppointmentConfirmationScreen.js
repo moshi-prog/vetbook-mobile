@@ -69,14 +69,15 @@ const formatMinutes = (total) => {
 };
 
 /** '10:00' → '10:00 AM - 10:30 AM (GMT+8)' (returns pre-formatted AM/PM values directly) */
-const formatTimeRange = (time) => {
+const formatTimeRange = (time, durationMin = EST_DURATION_MIN) => {
   const raw = String(time ?? '').trim();
   if (!raw) return 'Time TBD';
+  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call (Staff Will Propose Slot)';
   if (/(?:am|pm)\s*$/i.test(raw)) return raw;
   const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
   const start = h * 60 + (m || 0);
-  return `${formatMinutes(start)} - ${formatMinutes(start + EST_DURATION_MIN)} (GMT+8)`;
+  return `${formatMinutes(start)} - ${formatMinutes(start + durationMin)} (GMT+8)`;
 };
 
 // ─── Small components ────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ const InfoItem = ({ icon, label, value, subValue, last }) => (
 
 const AppointmentConfirmationScreen = ({ route, navigation }) => {
   const { height: windowHeight } = useWindowDimensions();
-  const { appointment, pet, branch, date, time, reason } = route?.params || {};
+  const { appointment, pet, pets, branch, date, time, reason } = route?.params || {};
 
   // Booking reference
   const bookingRef = appointment?.id
@@ -158,7 +159,10 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   const branchAddress = BRANCH_ADDRESSES[branchName] ?? 'VetBook Clinic';
 
   // Pet
-  const petName = pet?.name ?? appointment?.pet?.name ?? 'Your pet';
+  const petList = Array.isArray(pets) && pets.length > 0 ? pets : (pet ? [pet] : []);
+  const petName = petList.length > 1
+    ? `${petList.length} Pets (${petList.map((p) => p.name).join(', ')})`
+    : (pet?.name ?? appointment?.pet?.name ?? 'Your pet');
   const petSpecies = pet?.species ?? appointment?.pet?.species;
   const petAge = pet?.age ?? appointment?.pet?.age;
   const petAvatar = pet?.avatar_url ?? appointment?.pet?.avatar_url;
@@ -171,10 +175,13 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
     petAge !== undefined && petAge !== null && petAge !== ''
       ? `${petAge} ${Number(petAge) === 1 ? 'yr' : 'yrs'}`
       : null;
-  const petMeta = [petSpecies, ageLabel].filter(Boolean).join(' • ');
+  const petMeta = petList.length > 1
+    ? 'Simultaneous multi-pet booking'
+    : [petSpecies, ageLabel].filter(Boolean).join(' • ');
 
   // Reason
   const reasonText = reason || appointment?.reason || 'General visit';
+  const durationMin = Number(appointment?.duration_minutes) || (String(reasonText).toLowerCase().includes('groom') ? 120 : EST_DURATION_MIN);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -302,7 +309,7 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
               icon="calendar-outline"
               label="Date & Time"
               value={formattedDate}
-              subValue={formatTimeRange(effectiveTimeValue)}
+              subValue={formatTimeRange(effectiveTimeValue, durationMin)}
             />
             <InfoItem
               icon="clipboard-outline"

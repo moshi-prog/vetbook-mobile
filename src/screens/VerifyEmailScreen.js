@@ -82,6 +82,14 @@ const VerifyEmailScreen = ({ route, navigation }) => {
       const result = await verifyEmail(email, fullCode);
 
       if (result.success) {
+        if (result.pendingStaffApproval) {
+          Alert.alert(
+            'Awaiting Staff Approval',
+            result.message || 'Email verified! Your registration is now awaiting approval by Clinic Staff before you can sign in.',
+            [{ text: 'Back to Sign In', onPress: () => navigation.navigate('Login') }]
+          );
+          return;
+        }
         // Success: AuthContext transitions directly into authenticated home stack
         return;
       } else {

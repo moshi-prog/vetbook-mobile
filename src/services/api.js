@@ -153,12 +153,14 @@ export const getMedicalRecords = (petId) => api.get(`/pets/${petId}/medical-reco
 // ============= APPOINTMENT ENDPOINTS (for later) =============
 
 export const getUserAppointments = () => api.get('/user/appointments');
-export const getBookedSlots = (branch, date) =>
-  api.get('/appointments/booked-slots', { params: { branch, date } });
+export const getBookedSlots = (branch, date, service = null) =>
+  api.get('/appointments/booked-slots', { params: { branch, date, ...(service ? { service } : {}) } });
 export const getAppointment = (id) => api.get(`/appointments/${id}`);
 export const createAppointment = (data) => api.post('/appointments', data);
 export const rescheduleAppointment = (id, data) => api.put(`/appointments/${id}/reschedule`, data);
 export const cancelAppointment = (id, data = {}) => api.put(`/appointments/${id}/cancel`, data);
+export const confirmAppointmentAttendance = (id) => api.post(`/appointments/${id}/confirm-attendance`);
+export const respondToSurgerySlot = (id, data) => api.post(`/appointments/${id}/surgery-response`, data);
 
 // ============= NOTIFICATIONS ENDPOINTS =============
 
@@ -198,6 +200,8 @@ api.getAppointment = getAppointment;
 api.createAppointment = createAppointment;
 api.rescheduleAppointment = rescheduleAppointment;
 api.cancelAppointment = cancelAppointment;
+api.confirmAppointmentAttendance = confirmAppointmentAttendance;
+api.respondToSurgerySlot = respondToSurgerySlot;
 api.getNotifications = getNotifications;
 api.markNotificationRead = markNotificationRead;
 api.markAllNotificationsRead = markAllNotificationsRead;
