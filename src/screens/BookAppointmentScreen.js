@@ -43,7 +43,6 @@ import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
 import api from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
-import TimeWindowPicker from '../components/TimeWindowPicker';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -84,7 +83,7 @@ const SERVICES = [
   { id: 'Diagnostic / Checkup', label: 'Diagnostic / Checkup', durationLabel: '15–30 mins', mins: 30, icon: 'medkit-outline' },
   { id: 'Vaccination', label: 'Vaccination', durationLabel: '15–30 mins', mins: 30, icon: 'shield-checkmark-outline' },
   { id: 'Grooming', label: 'Grooming', durationLabel: '2 Hours (3:00 PM cut-off)', mins: 120, cutoff: '15:00', icon: 'cut-outline' },
-  { id: 'Surgery', label: 'Surgery (On-Call)', durationLabel: 'On-Call • Staff Schedules Slot', mins: 60, isSurgery: true, icon: 'pulse-outline' },
+  { id: 'Surgery', label: 'Surgery (On-Call)', durationLabel: 'On-Call • Staff Assigns Date', mins: 60, isSurgery: true, icon: 'pulse-outline' },
 ];
 
 const BRANCH_STAFF_META = {
@@ -268,8 +267,6 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const [bookedSlots, setBookedSlots]       = useState([]);
   const [fetchingSlots, setFetchingSlots]   = useState(false);
   const [reason, setReason]                 = useState('Diagnostic / Checkup');
-  const [preferredFromTime, setPreferredFromTime] = useState('9:00 AM');
-  const [preferredToTime, setPreferredToTime]     = useState('4:00 PM');
   const [notes, setNotes]                   = useState('');
   const [loading, setLoading]               = useState(false);
   const [fetchingPets, setFetchingPets]     = useState(true);
@@ -388,7 +385,10 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   }, [availableSlots, isSlotBlockedForService, isSurgery, selectedTime]);
 
   // Progress: first incomplete step is the "current" one
-  const currentStep = selectedPets.length === 0 ? 1 : !selectedDate ? 2 : (!isSurgery && !selectedTime) ? 3 : 4;
+  const progressSteps = isSurgery ? ['Select Pet', 'Confirm'] : STEPS;
+  const currentStep = isSurgery
+    ? (selectedPets.length === 0 ? 1 : 2)
+    : (selectedPets.length === 0 ? 1 : !selectedDate ? 2 : !selectedTime ? 3 : 4);
 
   const now = new Date();
   const isSlotPast = (slot) => {
@@ -450,7 +450,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       pet: selectedPets[0] ?? null,
       pets: selectedPets,
       branch: selectedBranch,
-      date: toDateString(selectedDate),
+      date: isSurgery ? (appointment?.appointment_date || null) : toDateString(selectedDate),
       time: isSurgery ? 'ON_CALL' : selectedTime,
       reason,
     });
@@ -463,7 +463,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       Alert.alert('Select pet(s)', 'Please choose one or more pets for this appointment.');
       return;
     }
-    if (!selectedDate) {
+    if (!isSurgery && !selectedDate) {
       Alert.alert('Choose a date', 'Please pick an appointment date (tomorrow onwards).');
       return;
     }
@@ -472,23 +472,26 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       return;
     }
 
-    const payload = {
-      pet_ids: selectedPets.map((p) => p.id),
-      pet_id: selectedPets[0].id,
-      branch: selectedBranch,
-      appointment_date: toDateString(selectedDate),
-      appointment_time: isSurgery ? 'ON_CALL' : selectedTime,
-      service_type: reason,
-      disallow_same_day: true,
-      reason,
-      ...(isSurgery
-        ? {
-            preferred_time_from: preferredFromTime,
-            preferred_time_to: preferredToTime,
-          }
-        : {}),
-      notes: notes.trim() || null,
-    };
+    const payload = isSurgery
+      ? {
+          pet_ids: selectedPets.map((p) => p.id),
+          pet_id: selectedPets[0].id,
+          branch: selectedBranch,
+          service_type: 'Surgery',
+          reason: 'Surgery',
+          notes: notes.trim() || null,
+        }
+      : {
+          pet_ids: selectedPets.map((p) => p.id),
+          pet_id: selectedPets[0].id,
+          branch: selectedBranch,
+          appointment_date: toDateString(selectedDate),
+          appointment_time: selectedTime,
+          service_type: reason,
+          disallow_same_day: true,
+          reason,
+          notes: notes.trim() || null,
+        };
 
     setLoading(true);
     try {
@@ -498,7 +501,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
       showNotificationBanner({
         title: isSurgery ? 'Surgery Request Sent' : 'Appointment Booked',
         message: isSurgery
-          ? 'Branch staff will review surgeon availability and send a proposed schedule.'
+          ? 'Branch staff will assign an available surgery date for you to confirm.'
           : 'Your booking has been received and is pending clinic review.',
         type: 'appointment',
         appointmentId: appointment?.id,
@@ -555,14 +558,14 @@ const BookAppointmentScreen = ({ route, navigation }) => {
         >
           {/* ── 2. Progress indicator ─────────────────────────────────── */}
           <View style={styles.progressRow}>
-            {STEPS.map((label, i) => {
+            {progressSteps.map((label, i) => {
               const step = i + 1;
               const done = step < currentStep;
               const current = step === currentStep;
               const filled = done || current;
               return (
                 <View key={label} style={styles.stepCol}>
-                  {i < STEPS.length - 1 && (
+                  {i < progressSteps.length - 1 && (
                     <View style={[styles.stepLine, step < currentStep && styles.stepLineDone]} />
                   )}
                   <View style={[styles.stepCircle, filled && styles.stepCircleFilled]}>
@@ -717,95 +720,80 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {/* ── 6. Choose Date (Tomorrow Onwards) ─────────────────────── */}
-          <View style={styles.section}>
-            <SectionHeading
-              title={isSurgery ? 'Preferred Surgery Date' : 'Choose Date'}
-              right={<Text style={styles.sectionSubHelperInline}>Tomorrow onwards</Text>}
-            />
-            <View style={styles.monthRow}>
-              <TouchableOpacity
-                style={styles.monthBtn}
-                onPress={() => scrollDates(-1)}
-                accessibilityLabel="Previous dates"
-              >
-                <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <Text style={styles.monthText}>{headerMonth}</Text>
-              <TouchableOpacity
-                style={styles.monthBtn}
-                onPress={() => scrollDates(1)}
-                accessibilityLabel="Next dates"
-              >
-                <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              ref={dateScrollRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dateRow}
-              onScroll={handleDateScroll}
-              scrollEventThrottle={64}
-            >
-              {dates.map((item) => {
-                const isSelected = isSameDay(selectedDate, item.date);
-                return (
-                  <TouchableOpacity
-                    key={item.date.toISOString()}
-                    style={[
-                      styles.dateCard,
-                      isSelected && styles.dateCardSelected,
-                      !item.available && styles.dateCardDisabled,
-                    ]}
-                    activeOpacity={0.85}
-                    disabled={!item.available}
-                    onPress={() => handleSelectDate(item)}
-                    accessibilityLabel={`${item.day} ${item.num}${item.available ? '' : ', unavailable'}`}
-                  >
-                    <Text style={[styles.dateDay, isSelected && styles.dateTextSelected]}>{item.day}</Text>
-                    <Text style={[styles.dateNum, isSelected && styles.dateTextSelected]}>{item.num}</Text>
-                    <View style={[styles.slotDot, isSelected && styles.slotDotVisible]} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            {isSurgery && selectedDate && (
-              <View style={styles.prefDateSummary}>
-                <Ionicons name="calendar-outline" size={14} color="#4A7C59" />
-                <Text style={styles.prefDateSummaryText}>
-                  Preferred Date: {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                </Text>
+          {/* ── 6. Choose Date (Regular services only) ─────────────────── */}
+          {!isSurgery && (
+            <View style={styles.section}>
+              <SectionHeading
+                title="Choose Date"
+                right={<Text style={styles.sectionSubHelperInline}>Tomorrow onwards</Text>}
+              />
+              <View style={styles.monthRow}>
+                <TouchableOpacity
+                  style={styles.monthBtn}
+                  onPress={() => scrollDates(-1)}
+                  accessibilityLabel="Previous dates"
+                >
+                  <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={styles.monthText}>{headerMonth}</Text>
+                <TouchableOpacity
+                  style={styles.monthBtn}
+                  onPress={() => scrollDates(1)}
+                  accessibilityLabel="Next dates"
+                >
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
-            )}
-          </View>
 
-          {/* ── 7. Choose Time (or On-Call Surgery Window) ─────────────── */}
+              <ScrollView
+                ref={dateScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.dateRow}
+                onScroll={handleDateScroll}
+                scrollEventThrottle={64}
+              >
+                {dates.map((item) => {
+                  const isSelected = isSameDay(selectedDate, item.date);
+                  return (
+                    <TouchableOpacity
+                      key={item.date.toISOString()}
+                      style={[
+                        styles.dateCard,
+                        isSelected && styles.dateCardSelected,
+                        !item.available && styles.dateCardDisabled,
+                      ]}
+                      activeOpacity={0.85}
+                      disabled={!item.available}
+                      onPress={() => handleSelectDate(item)}
+                      accessibilityLabel={`${item.day} ${item.num}${item.available ? '' : ', unavailable'}`}
+                    >
+                      <Text style={[styles.dateDay, isSelected && styles.dateTextSelected]}>{item.day}</Text>
+                      <Text style={[styles.dateNum, isSelected && styles.dateTextSelected]}>{item.num}</Text>
+                      <View style={[styles.slotDot, isSelected && styles.slotDotVisible]} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* ── 7. Choose Time (or On-Call Surgery Info Card) ───────────── */}
           <View style={styles.section}>
-            <SectionHeading
-              title={isSurgery ? 'Preferred Surgery Window' : 'Choose Time'}
-              right={!isSurgery && fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-            />
             {isSurgery ? (
-              <View style={{ gap: spacing.md }}>
-                <TimeWindowPicker
-                  title="When would you like your surgery?"
-                  fromTime={preferredFromTime}
-                  toTime={preferredToTime}
-                  onChangeFrom={setPreferredFromTime}
-                  onChangeTo={setPreferredToTime}
-                />
-                <View style={styles.surgeryNoticeCard}>
-                  <Ionicons name="pulse-outline" size={22} color={colors.primary} />
-                  <Text style={styles.surgeryNoticeTitle}>On-Call Surgery Scheduling</Text>
-                  <Text style={styles.surgeryNoticeSub}>
-                    Clinic staff will check surgeon availability for your preferred date ({preferredFromTime} – {preferredToTime}) and send an available slot for your confirmation in My Appointments.
-                  </Text>
-                </View>
+              <View style={styles.surgeryNoticeCard}>
+                <Ionicons name="pulse-outline" size={22} color={colors.primary} />
+                <Text style={styles.surgeryNoticeTitle}>On-Call Surgery Request</Text>
+                <Text style={styles.surgeryNoticeSub}>
+                  No date or time needed. Submit your request and our branch staff will assign an available surgery date for you to confirm in My Appointments.
+                </Text>
               </View>
             ) : (
               <>
+                <SectionHeading
+                  title="Choose Time"
+                  right={fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                />
                 {isGrooming && (
                   <View style={styles.groomingNoteCard}>
                     <Ionicons name="information-circle-outline" size={16} color="#705C30" />
@@ -870,7 +858,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
             )}
 
             <Text style={styles.notesLabel}>
-              {isSurgery ? 'Surgery Notes / Procedure Details' : 'Additional Notes'}{' '}
+              Additional Notes{' '}
               <Text style={styles.optional}>(Optional)</Text>
             </Text>
             <View>
@@ -917,7 +905,9 @@ const BookAppointmentScreen = ({ route, navigation }) => {
               </View>
               <View style={styles.summaryRight}>
                 <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-                <Text style={styles.summaryEst}>{selectedService.durationLabel}</Text>
+                <Text style={styles.summaryEst}>
+                  {isSurgery ? 'Staff Assigns Date' : selectedService.durationLabel}
+                </Text>
               </View>
             </View>
 
@@ -926,13 +916,15 @@ const BookAppointmentScreen = ({ route, navigation }) => {
               activeOpacity={0.88}
               onPress={handleSubmit}
               disabled={loading}
-              accessibilityLabel="Confirm appointment"
+              accessibilityLabel={isSurgery ? 'Request surgery' : 'Confirm appointment'}
             >
               {loading ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <>
-                  <Text style={styles.confirmText}>Confirm Appointment</Text>
+                  <Text style={styles.confirmText}>
+                    {isSurgery && selectedPets.length > 0 ? 'Request Surgery' : 'Confirm Appointment'}
+                  </Text>
                   <Ionicons name="arrow-forward" size={18} color={colors.white} />
                 </>
               )}

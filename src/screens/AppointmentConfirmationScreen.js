@@ -72,7 +72,7 @@ const formatMinutes = (total) => {
 const formatTimeRange = (time, durationMin = EST_DURATION_MIN) => {
   const raw = String(time ?? '').trim();
   if (!raw) return 'Time TBD';
-  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call (Staff Will Propose Slot)';
+  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call Surgery (Staff Assigns Date)';
   if (/(?:am|pm)\s*$/i.test(raw)) return raw;
   const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
@@ -121,6 +121,10 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
   const effectiveTimeValue = time || appointment?.appointment_time;
 
   // Date (parsed as local time so the weekday never shifts by timezone)
+  const isSurgeryRequest =
+    String(reason || appointment?.reason || '').toLowerCase().includes('surgery') ||
+    String(appointment?.service_type || '').toLowerCase() === 'surgery' ||
+    String(effectiveTimeValue || '').toUpperCase() === 'ON_CALL';
   const parsedDate = parseLocalDate(effectiveDateValue);
   const formattedDate = parsedDate
     ? parsedDate.toLocaleDateString('en-US', {
@@ -129,7 +133,7 @@ const AppointmentConfirmationScreen = ({ route, navigation }) => {
         month: 'long',
         day: 'numeric',
       })
-    : 'Date TBD';
+    : (isSurgeryRequest ? 'Awaiting Staff Date' : 'Date TBD');
 
   // Status presentation
   const apptStatus = (appointment?.status || 'pending').toLowerCase();

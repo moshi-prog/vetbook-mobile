@@ -43,7 +43,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, fontSizes, spacing, radii, shadows, statusColors } from '../theme';
 import api from '../services/api';
 import ThemedDialog from '../components/ThemedDialog';
-import TimeWindowPicker from '../components/TimeWindowPicker';
 import { useNotification } from '../contexts/NotificationContext';
 import { generateTimeSlots } from '../utils/timeSlots';
 
@@ -135,18 +134,18 @@ const parseLocalDate = (value) => {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
 };
 
-const formatDate = (value) => {
+const formatDate = (value, isSurgeryRequest = false) => {
   const d = parseLocalDate(value);
   return d
     ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-    : 'Date TBD';
+    : (isSurgeryRequest ? 'Awaiting Staff Date' : 'Date TBD');
 };
 
 /** '14:30' | '14:30:00' | '2:30 PM' | 'ON_CALL' → '2:30 PM' */
 const formatTime = (value) => {
   const raw = String(value ?? '').trim();
   if (!raw) return 'Time TBD';
-  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call (Staff Schedules)';
+  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call Surgery';
   if (/(?:am|pm)\s*$/i.test(raw)) return raw;
   const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return 'Time TBD';
@@ -185,7 +184,7 @@ const getTicketBranchAddress = (branch) => {
   return 'VetBook Animal Clinic';
 };
 
-const formatTicketFullDate = (value) => {
+const formatTicketFullDate = (value, isSurgeryRequest = false) => {
   const d = parseLocalDate(value);
   return d
     ? d.toLocaleDateString('en-US', {
@@ -194,7 +193,7 @@ const formatTicketFullDate = (value) => {
         month: 'long',
         day: 'numeric',
       })
-    : 'Date TBD';
+    : (isSurgeryRequest ? 'Awaiting Staff Date' : 'Date TBD');
 };
 
 const sortKey = (a) =>
@@ -255,16 +254,15 @@ const findBranchMatch = (branches, branchName) => {
 const SurgeryProposalBanner = ({ appt, busy, onRespond }) => {
   if (!appt || appt.surgery_status !== 'slot_proposed') return null;
   const proposedDate = appt.proposed_date || appt.appointment_date;
-  const proposedTime = appt.proposed_time || appt.appointment_time;
 
   return (
     <View style={styles.surgeryProposalBanner}>
       <View style={styles.bannerHeaderRow}>
         <Ionicons name="pulse-outline" size={16} color="#1D4ED8" />
-        <Text style={styles.surgeryProposalTitle}>Clinic Staff Proposed a Surgery Schedule</Text>
+        <Text style={styles.surgeryProposalTitle}>Clinic Staff Proposed a Surgery Date</Text>
       </View>
       <Text style={styles.surgeryProposalSub}>
-        Proposed slot: {formatDate(proposedDate)} • {formatTime(proposedTime)}
+        Proposed surgery date: {formatDate(proposedDate, true)}
       </Text>
       <View style={styles.bannerBtnsRow}>
         <TouchableOpacity
@@ -273,7 +271,7 @@ const SurgeryProposalBanner = ({ appt, busy, onRespond }) => {
           activeOpacity={0.85}
           onPress={() => onRespond?.(appt, 'accept')}
         >
-          <Text style={styles.bannerPrimaryBtnText}>Proceed with This Schedule</Text>
+          <Text style={styles.bannerPrimaryBtnText}>Proceed with This Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.bannerSecondaryBtn}
@@ -281,7 +279,7 @@ const SurgeryProposalBanner = ({ appt, busy, onRespond }) => {
           activeOpacity={0.85}
           onPress={() => onRespond?.(appt, 'request_another')}
         >
-          <Text style={styles.bannerSecondaryBtnText}>Ask for Another Time</Text>
+          <Text style={styles.bannerSecondaryBtnText}>Ask for Another Date</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -326,6 +324,10 @@ const AppointmentCard = ({
 
   const speciesAgeLabel = [pet.species, formatPetAge(pet)].filter(Boolean).join(' • ');
   const branchHint = getBranchStreetHint(appt.branch);
+  const isSurgeryAppt =
+    appt.service_type === 'surgery' ||
+    String(appt.reason ?? '').toLowerCase().includes('surgery') ||
+    String(appt.appointment_time ?? '').toUpperCase() === 'ON_CALL';
 
   return (
     <View style={styles.card}>
@@ -383,7 +385,7 @@ const AppointmentCard = ({
               <Ionicons name="calendar-outline" size={13} color={colors.primary} />
             </View>
             <Text style={styles.infoPrimaryText} numberOfLines={1}>
-              {formatDate(appt.appointment_date)}
+              {formatDate(appt.appointment_date, isSurgeryAppt)}
               <Text style={styles.infoTimeHighlight}> • {formatTime(appt.appointment_time)}</Text>
             </Text>
           </View>
@@ -406,11 +408,11 @@ const AppointmentCard = ({
           </View>
         )}
 
-        {isUpcoming && appt.surgery_status === 'awaiting_slot' && (
+        {isUpcoming && (appt.surgery_status === 'awaiting_slot' || appt.surgery_status === 'reschedule_requested') && (
           <View style={styles.surgeryWaitingBanner}>
             <Ionicons name="time-outline" size={15} color="#705C30" />
             <Text style={styles.surgeryWaitingText}>
-              On-Call Surgery Request • Branch staff will propose an available surgical time slot shortly.
+              On-Call Surgery Request • Branch staff will assign an available surgery date shortly.
             </Text>
           </View>
         )}
@@ -520,12 +522,9 @@ const MyAppointmentsScreen = ({ navigation }) => {
   const [actionBusyId, setActionBusyId] = useState(null);
   const [branches, setBranches] = useState([]);
 
-  // Surgery Preferred Time Modal state ("Ask for Another Time")
+  // Surgery Date Re-request Modal state ("Ask for Another Date")
   const [surgeryPrefModalVisible, setSurgeryPrefModalVisible] = useState(false);
   const [surgeryPrefAppt, setSurgeryPrefAppt] = useState(null);
-  const [surgeryPrefDate, setSurgeryPrefDate] = useState('');
-  const [surgeryPrefFrom, setSurgeryPrefFrom] = useState('9:00 AM');
-  const [surgeryPrefTo, setSurgeryPrefTo] = useState('4:00 PM');
   const [surgeryPrefNotes, setSurgeryPrefNotes] = useState('');
   const [submittingSurgeryPref, setSubmittingSurgeryPref] = useState(false);
 
@@ -736,7 +735,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
         if (st === 'completed' || st === 'cancelled' || (st !== 'pending' && st !== 'approved')) {
           return false;
         }
-        const apptDateStr = String(a.appointment_date ?? '').slice(0, 10);
+        const apptDateStr = a.appointment_date ? String(a.appointment_date).slice(0, 10) : '';
         if (apptDateStr) {
           if (apptDateStr < localTodayStr) {
             return false;
@@ -929,10 +928,6 @@ const MyAppointmentsScreen = ({ navigation }) => {
     if (action === 'request_another') {
       setSelectedTicketAppt(null);
       setSurgeryPrefAppt(appt);
-      const defaultDate = availableDays[0]?.dateStr || toDateString(new Date(Date.now() + 86400000));
-      setSurgeryPrefDate(defaultDate);
-      setSurgeryPrefFrom('9:00 AM');
-      setSurgeryPrefTo('4:00 PM');
       setSurgeryPrefNotes('');
       setSurgeryPrefModalVisible(true);
       return;
@@ -948,8 +943,8 @@ const MyAppointmentsScreen = ({ navigation }) => {
       }
       fetchNotifications?.(true);
       showDialog(
-        'Surgery Schedule Confirmed',
-        res?.data?.message || 'Your response has been sent to clinic staff.',
+        'Surgery Date Confirmed',
+        res?.data?.message || 'Your surgery date has been confirmed.',
         'info'
       );
     } catch (err) {
@@ -966,9 +961,6 @@ const MyAppointmentsScreen = ({ navigation }) => {
     try {
       const res = await api.respondToSurgerySlot(surgeryPrefAppt.id, {
         action: 'request_another',
-        preferred_date: surgeryPrefDate,
-        preferred_time_from: surgeryPrefFrom,
-        preferred_time_to: surgeryPrefTo,
         preferred_notes: surgeryPrefNotes.trim() || undefined,
       });
       setSurgeryPrefModalVisible(false);
@@ -976,12 +968,12 @@ const MyAppointmentsScreen = ({ navigation }) => {
       await fetchAppointments();
       fetchNotifications?.(true);
       showDialog(
-        'Preferred Surgery Schedule Sent',
-        res?.data?.message || 'Your new preferred date and time window have been sent to clinic staff.',
+        'Request Sent',
+        res?.data?.message || 'Your request for another surgery date has been sent to clinic staff.',
         'info'
       );
     } catch (err) {
-      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not submit preferred surgery schedule.';
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not send your surgery date request.';
       showDialog('Notice', msg, 'error');
     } finally {
       setSubmittingSurgeryPref(false);
@@ -1314,7 +1306,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
                 <Text style={styles.modalTitle}>Cancel Appointment</Text>
                 <Text style={styles.modalSub}>
                   {cancellingAppt
-                    ? `For ${cancellingAppt.pet?.name || 'your pet'} on ${formatDate(cancellingAppt.appointment_date)}`
+                    ? `For ${cancellingAppt.pet?.name || 'your pet'} • ${formatDate(cancellingAppt.appointment_date, cancellingAppt.service_type === 'surgery')}`
                     : 'Please tell us why you need to cancel this appointment'}
                 </Text>
               </View>
@@ -1341,8 +1333,8 @@ const MyAppointmentsScreen = ({ navigation }) => {
                     <Text style={{ fontFamily: fonts.bodyBold }}>
                       {cancellingAppt.pet?.name || 'your pet'}
                     </Text>{' '}
-                    on {formatDate(cancellingAppt.appointment_date)} at{' '}
-                    {formatTime(cancellingAppt.appointment_time)}
+                    ({formatDate(cancellingAppt.appointment_date, cancellingAppt.service_type === 'surgery')} at{' '}
+                    {formatTime(cancellingAppt.appointment_time)})
                   </Text>
                 </View>
               )}
@@ -1513,7 +1505,11 @@ const MyAppointmentsScreen = ({ navigation }) => {
                       <View style={styles.ticketDetailTextWrap}>
                         <Text style={styles.ticketDetailLabel}>DATE & TIME</Text>
                         <Text style={styles.ticketDetailValue}>
-                          {formatTicketFullDate(selectedTicketAppt.appointment_date)}
+                          {formatTicketFullDate(
+                            selectedTicketAppt.appointment_date,
+                            selectedTicketAppt.service_type === 'surgery' ||
+                              String(selectedTicketAppt.reason ?? '').toLowerCase().includes('surgery')
+                          )}
                         </Text>
                         <Text style={styles.ticketDetailSub}>
                           {formatTime(selectedTicketAppt.appointment_time)} (GMT+8)
@@ -1614,8 +1610,8 @@ const MyAppointmentsScreen = ({ navigation }) => {
         >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>Request Another Surgery Time</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Ask for Another Date</Text>
                 <Text style={styles.modalSub}>
                   {surgeryPrefAppt?.pet?.name ?? 'Pet'} • {surgeryPrefAppt?.branch ?? 'Clinic'}
                 </Text>
@@ -1628,50 +1624,12 @@ const MyAppointmentsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              <Text style={styles.modalSectionLabel}>PREFERRED SURGERY DATE</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
-                {availableDays.map((d) => {
-                  const selected = surgeryPrefDate === d.dateStr;
-                  return (
-                    <TouchableOpacity
-                      key={d.dateStr}
-                      style={[
-                        {
-                          width: 58,
-                          paddingVertical: 10,
-                          borderRadius: 14,
-                          borderWidth: 1.5,
-                          borderColor: selected ? '#4A7C59' : '#EAE6DE',
-                          backgroundColor: selected ? '#4A7C59' : '#FFFFFF',
-                          alignItems: 'center',
-                        },
-                      ]}
-                      onPress={() => setSurgeryPrefDate(d.dateStr)}
-                    >
-                      <Text style={{ fontSize: 11, color: selected ? '#FFFFFF' : '#6B6358', fontFamily: fonts.bodySemiBold }}>
-                        {d.dayName}
-                      </Text>
-                      <Text style={{ fontSize: 16, color: selected ? '#FFFFFF' : '#2E3230', fontFamily: fonts.bodyBold }}>
-                        {d.dayNum}
-                      </Text>
-                      <Text style={{ fontSize: 10, color: selected ? '#FFFFFF' : '#6B6358' }}>
-                        {d.monthName}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+            <View style={{ paddingBottom: spacing.md }}>
+              <Text style={{ fontFamily: fonts.bodyRegular, fontSize: fontSizes.sm, color: colors.textSecondary, lineHeight: 19, marginBottom: spacing.md }}>
+                Our clinic staff will review surgeon availability and assign a new surgery date for your confirmation.
+              </Text>
 
-              <TimeWindowPicker
-                title="When would you like your surgery?"
-                fromTime={surgeryPrefFrom}
-                toTime={surgeryPrefTo}
-                onChangeFrom={setSurgeryPrefFrom}
-                onChangeTo={setSurgeryPrefTo}
-              />
-
-              <Text style={[styles.modalSectionLabel, { marginTop: spacing.md }]}>NOTES (OPTIONAL)</Text>
+              <Text style={styles.modalSectionLabel}>NOTES (OPTIONAL)</Text>
               <TextInput
                 style={{
                   backgroundColor: '#FAF6F0',
@@ -1679,19 +1637,19 @@ const MyAppointmentsScreen = ({ navigation }) => {
                   borderColor: '#D5CFC2',
                   borderRadius: 14,
                   padding: 12,
-                  minHeight: 72,
+                  minHeight: 84,
                   color: colors.textPrimary,
                   fontFamily: fonts.bodyRegular,
                   textAlignVertical: 'top',
                 }}
-                placeholder="Share any preferred details or notes for clinic staff..."
+                placeholder="Any dates you're unavailable or notes for clinic staff (optional)..."
                 placeholderTextColor={colors.textTertiary}
                 value={surgeryPrefNotes}
                 onChangeText={setSurgeryPrefNotes}
                 multiline
                 maxLength={400}
               />
-            </ScrollView>
+            </View>
 
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -1709,7 +1667,7 @@ const MyAppointmentsScreen = ({ navigation }) => {
                 {submittingSurgeryPref ? (
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
-                  <Text style={styles.modalSaveText}>Send Preference</Text>
+                  <Text style={styles.modalSaveText}>Send Request</Text>
                 )}
               </TouchableOpacity>
             </View>

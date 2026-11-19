@@ -89,10 +89,11 @@ const formatDate = (value) => {
       });
 };
 
-/** Formats '14:30' | '14:30:00' | '2:30 PM' to '2:30 PM'. */
+/** Formats '14:30' | '14:30:00' | '2:30 PM' | 'ON_CALL' → '2:30 PM' or 'On-Call Surgery'. */
 const formatTime = (value) => {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
+  if (raw.toUpperCase() === 'ON_CALL') return 'On-Call Surgery';
   if (/(?:am|pm)\s*$/i.test(raw)) return raw;
   const [h, m] = raw.split(':').map(Number);
   if (Number.isNaN(h)) return '';
@@ -102,14 +103,17 @@ const formatTime = (value) => {
 };
 
 /** Formats appointment date and time nicely together, e.g. "Nov 6, 2026 · 10:00 AM". */
-const formatAppointmentDateTime = (dateVal, timeVal) => {
+const formatAppointmentDateTime = (dateVal, timeVal, isSurgery = false) => {
   const dStr = formatDate(dateVal);
   const tStr = formatTime(timeVal);
   if (dStr !== '—' && tStr) {
     return `${dStr} · ${tStr}`;
   }
   if (dStr !== '—') return dStr;
-  return tStr || '—';
+  if (isSurgery || String(timeVal ?? '').toUpperCase() === 'ON_CALL') {
+    return 'Awaiting Staff Date · On-Call Surgery';
+  }
+  return tStr || 'Awaiting Staff Date';
 };
 
 /** Maps a status string to theme colors, indicator dot, and user-friendly label. */
@@ -748,7 +752,11 @@ const HomeScreen = ({ navigation }) => {
                       <View style={styles.apptMetaRow}>
                         <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
                         <Text style={styles.apptMeta} numberOfLines={1}>
-                          {formatAppointmentDateTime(appt.appointment_date ?? appt.scheduled_at, appt.appointment_time)}
+                          {formatAppointmentDateTime(
+                            appt.appointment_date ?? appt.scheduled_at,
+                            appt.appointment_time,
+                            appt.service_type === 'surgery' || String(appt.reason ?? '').toLowerCase().includes('surgery')
+                          )}
                         </Text>
                       </View>
                     </View>
