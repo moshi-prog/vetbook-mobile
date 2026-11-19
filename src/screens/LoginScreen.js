@@ -68,6 +68,7 @@ const LoginScreen = ({ navigation }) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [pendingApprovalNotice, setPendingApprovalNotice] = useState(null);
 
   // ── Per-field errors ───────────────────────────────────────────────────────
   const [emailError, setEmailError] = useState(null);
@@ -155,6 +156,7 @@ const LoginScreen = ({ navigation }) => {
   // ─── Submit ─────────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     setErrorMessage(null);
+    setPendingApprovalNotice(null);
     if (!validateForm()) return;
 
     setLoading(true);
@@ -175,21 +177,16 @@ const LoginScreen = ({ navigation }) => {
         // AuthContext state change automatically swaps to the authenticated stack
         return;
       } else if (result.needsVerification) {
-        Alert.alert(
-          'Email Verification Required',
-          result.message || 'Your account is not verified yet. We have sent a verification code to your email.',
-          [
-            {
-              text: 'Verify Now',
-              onPress: () => navigation.navigate('VerifyEmail', { email: result.email || email.trim().toLowerCase() }),
-            },
-          ]
-        );
+        navigation.navigate('VerifyEmail', {
+          email: result.email || trimmedEmail,
+        });
         return;
       } else if (result.pendingStaffApproval) {
-        const msg = result.error || 'Your account is awaiting approval by Clinic Staff.';
-        setErrorMessage(msg);
-        Alert.alert('Awaiting Staff Approval', msg);
+        setPendingApprovalNotice({
+          title: 'Account Awaiting Clinic Approval',
+          message:
+            'Your email is verified! Please wait for BK Petaholic Animal Clinic staff to verify and approve your account. You will receive an email as soon as your account is approved.',
+        });
         return;
       } else {
         const msg = result.error || 'Invalid email or password.';
@@ -198,7 +195,6 @@ const LoginScreen = ({ navigation }) => {
     } catch (err) {
       const msg = err.message || 'An unexpected error occurred.';
       setErrorMessage(msg);
-      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }
@@ -416,6 +412,19 @@ const LoginScreen = ({ navigation }) => {
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
+
+            {/* — Locked Awaiting Staff Approval Notice — */}
+            {!!pendingApprovalNotice && (
+              <View style={styles.pendingApprovalBanner}>
+                <View style={styles.pendingApprovalIconCircle}>
+                  <Ionicons name="lock-closed" size={18} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pendingApprovalTitle}>{pendingApprovalNotice.title}</Text>
+                  <Text style={styles.pendingApprovalText}>{pendingApprovalNotice.message}</Text>
+                </View>
+              </View>
+            )}
 
             {/* — General error message (from backend) — */}
             {!!errorMessage && (
@@ -903,6 +912,38 @@ const styles = StyleSheet.create({
   },
 
   // ── Error banner (backend errors) ────────────────────────────────────────
+  pendingApprovalBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: '#FFF8E6',
+    borderWidth: 1.5,
+    borderColor: '#F3D68D',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.base,
+  },
+  pendingApprovalIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#E1F3E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  pendingApprovalTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.sm,
+    color: '#2E3230',
+    marginBottom: 2,
+  },
+  pendingApprovalText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: fontSizes.xs,
+    color: '#6B6358',
+    lineHeight: 17,
+  },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',

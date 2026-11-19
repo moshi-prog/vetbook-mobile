@@ -44,8 +44,10 @@ const VerifyEmailScreen = ({ route, navigation }) => {
   const [resending, setResending] = useState(false);
   const [timer, setTimer] = useState(RESEND_COOLDOWN_SECONDS);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [pendingApprovalScreen, setPendingApprovalScreen] = useState(false);
 
   const inputRef = useRef(null);
+  const verifyingRef = useRef(false);
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -69,11 +71,13 @@ const VerifyEmailScreen = ({ route, navigation }) => {
   }, []);
 
   const executeVerify = async (fullCode) => {
+    if (verifyingRef.current) return;
     if (fullCode.length !== CODE_LENGTH) {
       setErrorMessage('Please enter all 6 digits of your verification code.');
       return;
     }
 
+    verifyingRef.current = true;
     setLoading(true);
     setErrorMessage(null);
     Keyboard.dismiss();
@@ -83,11 +87,7 @@ const VerifyEmailScreen = ({ route, navigation }) => {
 
       if (result.success) {
         if (result.pendingStaffApproval) {
-          Alert.alert(
-            'Awaiting Staff Approval',
-            result.message || 'Email verified! Your registration is now awaiting approval by Clinic Staff before you can sign in.',
-            [{ text: 'Back to Sign In', onPress: () => navigation.navigate('Login') }]
-          );
+          setPendingApprovalScreen(true);
           return;
         }
         // Success: AuthContext transitions directly into authenticated home stack
@@ -99,8 +99,8 @@ const VerifyEmailScreen = ({ route, navigation }) => {
     } catch (err) {
       const msg = err.message || 'An unexpected error occurred.';
       setErrorMessage(msg);
-      Alert.alert('Error', msg);
     } finally {
+      verifyingRef.current = false;
       setLoading(false);
     }
   };
@@ -145,6 +145,45 @@ const VerifyEmailScreen = ({ route, navigation }) => {
   const handleContainerPress = () => {
     inputRef.current?.focus();
   };
+
+  if (pendingApprovalScreen) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={styles.lockedScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.lockedCard}>
+            <View style={styles.lockedIconCircle}>
+              <Ionicons name="lock-closed" size={32} color={colors.primary} />
+            </View>
+
+            <View style={styles.lockedPillBadge}>
+              <Ionicons name="hourglass-outline" size={13} color="#705C30" />
+              <Text style={styles.lockedPillText}>WAITING FOR CLINIC APPROVAL</Text>
+            </View>
+
+            <Text style={styles.lockedTitle}>Email Verified! Awaiting Approval</Text>
+
+            <Text style={styles.lockedMessage}>
+              Your email has been verified and we sent a confirmation to{' '}
+              <Text style={styles.lockedEmailHighlight}>{email || 'your email address'}</Text>. Please wait for BK Petaholic Animal Clinic staff to review and approve your account. You will receive another email as soon as your account is approved.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.lockedActionBtn}
+              activeOpacity={0.88}
+              onPress={() => navigation.navigate('Login')}
+              accessibilityLabel="Back to Sign In"
+            >
+              <Ionicons name="log-in-outline" size={18} color={colors.white} />
+              <Text style={styles.lockedActionBtnText}>Back to Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -563,6 +602,89 @@ const styles = StyleSheet.create({
   footerLinkBold: {
     fontWeight: '700',
     color: colors.primary,
+  },
+  lockedScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 32,
+  },
+  lockedCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.divider,
+    shadowColor: '#2E3230',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  lockedIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#E1F3E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C8E8D0',
+  },
+  lockedPillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8E0A8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    marginBottom: 14,
+  },
+  lockedPillText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 11,
+    color: '#705C30',
+    letterSpacing: 0.7,
+  },
+  lockedTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: 22,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  lockedMessage: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 24,
+  },
+  lockedEmailHighlight: {
+    fontFamily: fonts.bodyBold,
+    color: colors.primaryDeep,
+  },
+  lockedActionBtn: {
+    width: '100%',
+    height: 52,
+    backgroundColor: colors.primary,
+    borderRadius: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  lockedActionBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    color: colors.white,
   },
 });
 
