@@ -314,6 +314,7 @@ const HomeScreen = ({ navigation }) => {
   const {
     unreadCount,
     notifications,
+    appointmentRefreshTick,
     fetchNotifications,
     markAsRead,
     markAllAsRead,
@@ -384,6 +385,11 @@ const HomeScreen = ({ navigation }) => {
     }, [refreshUser, fetchAppointments, fetchNotifications, fetchBranches])
   );
 
+  // Immediately re-fetch appointments whenever notifications change or user acts inside the reminder modal
+  useEffect(() => {
+    fetchAppointments();
+  }, [appointmentRefreshTick, unreadCount, notifications.length, fetchAppointments]);
+
   const clinicOpen = isClinicOpen(branches, new Date(nowTick));
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
@@ -441,6 +447,7 @@ const HomeScreen = ({ navigation }) => {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   const localTodayStr = `${year}-${month}-${day}`;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const upcomingAppointments = appointments
     .filter((a) => {
@@ -450,7 +457,20 @@ const HomeScreen = ({ navigation }) => {
       const rawDate = a.appointment_date ?? a.scheduled_at;
       if (!rawDate) return true;
       const apptDateStr = String(rawDate).slice(0, 10);
-      return apptDateStr >= localTodayStr;
+      if (apptDateStr < localTodayStr) return false;
+      if (apptDateStr === localTodayStr) {
+        const rawTime = String(a.appointment_time ?? '').trim();
+        if (rawTime && rawTime.toUpperCase() !== 'ON_CALL') {
+          const startMins = parseTimeToMinutes(rawTime);
+          if (startMins !== null) {
+            const durationMins = Number(a.duration_minutes) || 30;
+            if (startMins + durationMins <= nowMinutes) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
     })
     .sort((a, b) => {
       const dateA = `${String(a.appointment_date ?? a.scheduled_at ?? '').slice(0, 10)} ${String(a.appointment_time ?? '').slice(0, 5)}`;

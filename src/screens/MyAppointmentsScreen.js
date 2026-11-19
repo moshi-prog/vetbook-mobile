@@ -318,7 +318,7 @@ const AppointmentCard = ({
     isUpcoming &&
     !appt.attendance_confirmed_at &&
     appt.surgery_status !== 'slot_proposed' &&
-    (Boolean(appt.reminder_24h_sent_at) || Boolean(appt.reminder_3h_sent_at) || isWithin24Hours);
+    (Boolean(appt.reminder_24h_sent_at) || isWithin24Hours);
 
   React.useEffect(() => {
     setPetAvatarError(false);
@@ -423,7 +423,9 @@ const AppointmentCard = ({
           <View style={styles.reminderPromptBanner}>
             <View style={styles.bannerHeaderRow}>
               <Ionicons name="notifications-outline" size={16} color="#705C30" />
-              <Text style={styles.reminderPromptTitle}>Reminder: Will your appointment still continue?</Text>
+              <Text style={styles.reminderPromptTitle}>
+                1-Day Reminder: Will your appointment still continue? Ignoring this reminder will automatically cancel and remove your appointment after a 12-hour waiting time.
+              </Text>
             </View>
             <View style={styles.bannerBtnsRow}>
               <TouchableOpacity
@@ -506,7 +508,7 @@ const AppointmentCard = ({
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 const MyAppointmentsScreen = ({ navigation }) => {
-  const { showNotificationBanner, fetchNotifications, notifications, unreadCount } = useNotification();
+  const { showNotificationBanner, fetchNotifications, notifications, unreadCount, appointmentRefreshTick } = useNotification();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -704,10 +706,10 @@ const MyAppointmentsScreen = ({ navigation }) => {
     }, [fetchAppointments, fetchBranches]),
   );
 
-  // Immediately sync appointment list whenever new notifications / unread count change
+  // Immediately sync appointment list whenever new notifications, unread count, or reminder modal actions change
   React.useEffect(() => {
     fetchAppointments();
-  }, [unreadCount, notifications.length, fetchAppointments]);
+  }, [unreadCount, notifications.length, appointmentRefreshTick, fetchAppointments]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

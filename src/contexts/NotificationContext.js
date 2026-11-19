@@ -75,6 +75,7 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reminderModalBusy, setReminderModalBusy] = useState(false);
+  const [appointmentRefreshTick, setAppointmentRefreshTick] = useState(0);
 
   // Tracking seen notification IDs to detect newly arrived alerts during polling
   const knownNotificationIds = useRef(new Set());
@@ -209,6 +210,7 @@ export const NotificationProvider = ({ children }) => {
       activePushTokenRef.current = null;
       setNotifications([]);
       setUnreadCount(0);
+      setAppointmentRefreshTick(0);
       setBanner((prev) => ({ ...prev, visible: false }));
       return;
     }
@@ -385,17 +387,9 @@ export const NotificationProvider = ({ children }) => {
         (n) =>
           !n.read_at &&
           n.data?.requires_confirmation &&
-          (n.type === 'appointment_reminder_2h' ||
-            n.type === 'appointment_reminder_3h' ||
-            n.type === 'appointment_reminder_24h')
+          n.type === 'appointment_reminder_24h'
       )
     : null;
-
-  const isUrgentReminder = Boolean(
-    activeReminderModal?.data?.is_urgent_2h ||
-      activeReminderModal?.type === 'appointment_reminder_2h' ||
-      activeReminderModal?.type === 'appointment_reminder_3h'
-  );
 
   const handleConfirmReminderAttendance = useCallback(async () => {
     if (!activeReminderModal || reminderModalBusy) return;
@@ -405,7 +399,11 @@ export const NotificationProvider = ({ children }) => {
       if (apptId) {
         await confirmAppointmentAttendance(apptId);
       }
+      setAppointmentRefreshTick((t) => t + 1);
     } catch (e) {
+      if (e?.response?.status === 404 || e?.response?.status === 422) {
+        setAppointmentRefreshTick((t) => t + 1);
+      }
       // Fall through to mark read so confirmed/stale alerts dismiss cleanly
     } finally {
       await markAsRead(activeReminderModal.id);
@@ -424,7 +422,11 @@ export const NotificationProvider = ({ children }) => {
           cancel_reason: 'Cancelled from appointment reminder prompt',
         });
       }
+      setAppointmentRefreshTick((t) => t + 1);
     } catch (e) {
+      if (e?.response?.status === 404 || e?.response?.status === 422) {
+        setAppointmentRefreshTick((t) => t + 1);
+      }
       // Fall through to mark read
     } finally {
       await markAsRead(activeReminderModal.id);
@@ -441,6 +443,7 @@ export const NotificationProvider = ({ children }) => {
         hideNotificationBanner,
         notifications,
         unreadCount,
+        appointmentRefreshTick,
         loadingNotifications: loading,
         fetchNotifications,
         markAsRead,
@@ -471,14 +474,14 @@ export const NotificationProvider = ({ children }) => {
         <View style={reminderStyles.overlay}>
           {activeReminderModal && (
             <View style={reminderStyles.card}>
-              <View style={[reminderStyles.badgeRow, isUrgentReminder ? reminderStyles.badgeUrgent : reminderStyles.badgeStandard]}>
+              <View style={[reminderStyles.badgeRow, reminderStyles.badgeStandard]}>
                 <Ionicons
-                  name={isUrgentReminder ? 'alarm-outline' : 'calendar-outline'}
+                  name="calendar-outline"
                   size={15}
-                  color={isUrgentReminder ? '#BA1A1A' : '#4A7C59'}
+                  color="#4A7C59"
                 />
-                <Text style={[reminderStyles.badgeText, isUrgentReminder ? reminderStyles.badgeTextUrgent : reminderStyles.badgeTextStandard]}>
-                  {isUrgentReminder ? 'URGENT 2-HOUR APPOINTMENT REMINDER' : '1-DAY APPOINTMENT REMINDER'}
+                <Text style={[reminderStyles.badgeText, reminderStyles.badgeTextStandard]}>
+                  1-DAY APPOINTMENT REMINDER
                 </Text>
               </View>
 
@@ -487,7 +490,7 @@ export const NotificationProvider = ({ children }) => {
 
               <View style={reminderStyles.warningBox}>
                 <Text style={reminderStyles.warningText}>
-                  ⚠️ Important: Choosing to ignore this reminder will result in automatic appointment cancellation after a 1-hour waiting time.
+                  ⚠️ Important: Choosing to ignore this reminder will automatically cancel and remove your appointment after a 12-hour waiting time.
                 </Text>
               </View>
 
