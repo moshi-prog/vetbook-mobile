@@ -21,7 +21,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ScrollView,
   View,
@@ -37,6 +37,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../theme';
@@ -265,6 +266,8 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const [selectedDate, setSelectedDate]     = useState(null);
   const [selectedTime, setSelectedTime]     = useState(null);
   const [bookedSlots, setBookedSlots]       = useState([]);
+  const [slotCounts, setSlotCounts]         = useState({});
+  const [slotCapacity, setSlotCapacity]     = useState(1);
   const [fetchingSlots, setFetchingSlots]   = useState(false);
   const [reason, setReason]                 = useState('Diagnostic / Checkup');
   const [notes, setNotes]                   = useState('');
@@ -275,6 +278,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
   const [visibleDateIdx, setVisibleDateIdx] = useState(0);
   const dateScrollRef = useRef(null);
   const dateScrollX   = useRef(0);
+  const slotFetchSeq  = useRef(0);
 
   // ── Fetch branch operating hours & details on mount ────────────────────────
   useEffect(() => {
@@ -339,29 +343,57 @@ const BookAppointmentScreen = ({ route, navigation }) => {
     return generateTimeSlots(branchObj, selectedDate);
   }, [branchObj, selectedDate]);
 
-  // ── Fetch live booked slots when branch, date, or service changes ─────────
-  useEffect(() => {
+  // ── Fetch live booked slots for current branch, date, and service pool ────
+  const fetchLiveSlots = useCallback(async () => {
     if (!selectedBranch || !selectedDate || isSurgery) {
       setBookedSlots([]);
+      setSlotCounts({});
       return;
     }
-    let cancelled = false;
+    const reqSeq = ++slotFetchSeq.current;
     setFetchingSlots(true);
-    (async () => {
-      try {
-        const dateStr = toDateString(selectedDate);
-        const res = await api.getBookedSlots(selectedBranch, dateStr, reason);
-        if (!cancelled) {
-          setBookedSlots(res.data?.booked_slots || []);
-        }
-      } catch (err) {
-        if (!cancelled) setBookedSlots([]);
-      } finally {
-        if (!cancelled) setFetchingSlots(false);
+    try {
+      const dateStr = toDateString(selectedDate);
+      const res = await api.getBookedSlots(selectedBranch, dateStr, reason);
+      if (reqSeq !== slotFetchSeq.current) return;
+      setBookedSlots(res.data?.booked_slots || []);
+      setSlotCounts(res.data?.slot_counts || {});
+      setSlotCapacity(
+        Number(res.data?.capacity) ||
+          (selectedBranch.toLowerCase().includes('batangas') ? (isGrooming ? 3 : 2) : 1)
+      );
+    } catch (err) {
+      if (reqSeq !== slotFetchSeq.current) return;
+      setBookedSlots([]);
+      setSlotCounts({});
+    } finally {
+      if (reqSeq === slotFetchSeq.current) {
+        setFetchingSlots(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedBranch, selectedDate, reason, isSurgery]);
+    }
+  }, [selectedBranch, selectedDate, reason, isSurgery, isGrooming]);
+
+  // Immediately clear stale slots & selectedTime whenever branch, date, or service changes
+  useEffect(() => {
+    ++slotFetchSeq.current;
+    setBookedSlots([]);
+    setSlotCounts({});
+    setSlotCapacity(selectedBranch.toLowerCase().includes('batangas') ? (isGrooming ? 3 : 2) : 1);
+    setSelectedTime(null);
+    if (!selectedBranch || !selectedDate || isSurgery) {
+      setFetchingSlots(false);
+      return;
+    }
+    fetchLiveSlots();
+  }, [selectedBranch, selectedDate, reason, isSurgery, isGrooming, fetchLiveSlots]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (selectedBranch && selectedDate && !isSurgery) {
+        fetchLiveSlots();
+      }
+    }, [selectedBranch, selectedDate, isSurgery, fetchLiveSlots])
+  );
 
   const isSlotBlockedForService = React.useCallback((slot) => {
     if (bookedSlots.includes(slot)) return true;
@@ -794,6 +826,22 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                   title="Choose Time"
                   right={fetchingSlots ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                 />
+                <View style={styles.poolBadgeCard}>
+                  <Ionicons
+                    name={isGrooming ? 'cut-outline' : 'medkit-outline'}
+                    size={15}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.poolBadgeText}>
+                    {isGrooming
+                      ? selectedBranch.toLowerCase().includes('batangas')
+                        ? 'Groomer Schedule • 3 Groomers (up to 3 simultaneous bookings)'
+                        : 'Groomer Schedule • 1 Groomer (independent from Vet slots)'
+                      : selectedBranch.toLowerCase().includes('batangas')
+                      ? 'Veterinarian Schedule • 2 Vets (up to 2 simultaneous bookings)'
+                      : 'Veterinarian Schedule • 1 Vet (shared by Checkup, Vaccination & Surgery)'}
+                  </Text>
+                </View>
                 {isGrooming && (
                   <View style={styles.groomingNoteCard}>
                     <Ionicons name="information-circle-outline" size={16} color="#705C30" />
@@ -825,6 +873,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                       const past = isSlotPast(slot);
                       const disabled = blocked || past;
                       const isSelected = selectedTime === slot && !disabled;
+                      const remainingOpen = Math.max(0, slotCapacity - (slotCounts[slot] || 0));
                       return (
                         <TouchableOpacity
                           key={slot}
@@ -838,17 +887,29 @@ const BookAppointmentScreen = ({ route, navigation }) => {
                           onPress={() => handleSelectTime(slot)}
                           accessibilityLabel={`${formatSlot(slot)}${blocked ? ', unavailable' : ''}`}
                         >
-                          {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                          <Text
-                            style={[
-                              styles.timeText,
-                              isSelected && styles.timeTextSelected,
-                              disabled && styles.timeTextDisabled,
-                              blocked && styles.timeTextBooked,
-                            ]}
-                          >
-                            {formatSlot(slot)}
-                          </Text>
+                          <View style={styles.timeSlotTopRow}>
+                            {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                            <Text
+                              style={[
+                                styles.timeText,
+                                isSelected && styles.timeTextSelected,
+                                disabled && styles.timeTextDisabled,
+                                blocked && styles.timeTextBooked,
+                              ]}
+                            >
+                              {formatSlot(slot)}
+                            </Text>
+                          </View>
+                          {slotCapacity > 1 && !disabled && (
+                            <Text
+                              style={[
+                                styles.slotRemainingText,
+                                isSelected && styles.slotRemainingTextSelected,
+                              ]}
+                            >
+                              {remainingOpen}/{slotCapacity} open
+                            </Text>
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -1362,6 +1423,24 @@ const styles = StyleSheet.create({
   slotDotVisible: { backgroundColor: colors.amberLight },
 
   // ── Time grid ────────────────────────────────────────────────────────────
+  poolBadgeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#C8E8D0',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginBottom: spacing.sm,
+  },
+  poolBadgeText: {
+    flex: 1,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.primaryDeep,
+  },
   timeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1369,15 +1448,31 @@ const styles = StyleSheet.create({
   },
   timeSlot: {
     width: '31.5%',
-    height: 40,
+    minHeight: 42,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     borderRadius: radii.xl,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  timeSlotTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  slotRemainingText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 10,
+    color: colors.primary,
+  },
+  slotRemainingTextSelected: {
+    color: '#E8F5E9',
   },
   timeSlotSelected: {
     backgroundColor: colors.primary,

@@ -187,7 +187,9 @@ export const deleteMedicalRecordImage = (recordId, imageId) =>
 
 export const getUserAppointments = () => api.get('/user/appointments');
 export const getBookedSlots = (branch, date, service = null) =>
-  api.get('/appointments/booked-slots', { params: { branch, date, ...(service ? { service } : {}) } });
+  api.get('/appointments/booked-slots', {
+    params: { branch, date, ...(service ? { service } : {}), _t: Date.now() },
+  });
 export const getAppointment = (id) => api.get(`/appointments/${id}`);
 export const createAppointment = (data) => api.post('/appointments', data);
 export const rescheduleAppointment = (id, data) => api.put(`/appointments/${id}/reschedule`, data);
