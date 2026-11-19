@@ -188,6 +188,9 @@ const PetDetailsScreen = ({ route, navigation }) => {
   const [activeTab, setActiveTab]           = useState('Overview');
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [consultationModalVisible, setConsultationModalVisible] = useState(false);
+  const [uploadingRecordImages, setUploadingRecordImages] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState(null);
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   // Delete Pet Dialog States
   const [deleteDialogVisible, setDeleteDialogVisible]   = useState(false);
@@ -375,6 +378,101 @@ const PetDetailsScreen = ({ route, navigation }) => {
     setConsultationModalVisible(true);
   };
 
+  const applyUpdatedRecordImages = useCallback((recordId, imagesList) => {
+    const nextImages = Array.isArray(imagesList) ? imagesList : [];
+    setRecords((prev) =>
+      prev.map((r) => (String(r.id) === String(recordId) ? { ...r, images: nextImages } : r))
+    );
+    setSelectedConsultation((prev) =>
+      prev && String(prev.id) === String(recordId) ? { ...prev, images: nextImages } : prev
+    );
+  }, []);
+
+  const handleAddMedicalRecordPhotos = async () => {
+    if (!selectedConsultation?.id || uploadingRecordImages) return;
+    const existingCount = Array.isArray(selectedConsultation.images) ? selectedConsultation.images.length : 0;
+    const remainingSlots = Math.max(0, 5 - existingCount);
+    if (remainingSlots <= 0) {
+      Alert.alert('Photo Limit Reached', 'Each medical record can have at most 5 photos.');
+      return;
+    }
+
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to your photo library to attach photos to this medical record.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled || !Array.isArray(result.assets) || result.assets.length === 0) {
+        return;
+      }
+
+      const chosen = result.assets.slice(0, remainingSlots);
+      setUploadingRecordImages(true);
+      const dataUris = await Promise.all(
+        chosen.map(async (asset) => {
+          const mimeType = asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+          if (asset.base64) {
+            return `data:${mimeType};base64,${asset.base64}`;
+          }
+          if (asset.uri) {
+            const resp = await fetch(asset.uri);
+            const blob = await resp.blob();
+            return await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
+          return null;
+        })
+      );
+
+      const cleanUris = dataUris.filter(Boolean);
+      if (cleanUris.length === 0) {
+        Alert.alert('Upload Failed', 'Could not read the selected image(s).');
+        return;
+      }
+
+      const res = await api.uploadMedicalRecordImages(selectedConsultation.id, cleanUris);
+      const updatedImages = res?.data?.images ?? res?.data?.medical_record?.images ?? [];
+      applyUpdatedRecordImages(selectedConsultation.id, updatedImages);
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to upload photo(s). Please try again.';
+      Alert.alert('Upload Failed', errMsg);
+    } finally {
+      setUploadingRecordImages(false);
+    }
+  };
+
+  const handleDeleteMedicalRecordImage = async (img) => {
+    if (!selectedConsultation?.id || !img?.id || deletingImageId) return;
+    setDeletingImageId(img.id);
+    try {
+      const res = await api.deleteMedicalRecordImage(selectedConsultation.id, img.id);
+      const updatedImages = res?.data?.images ?? (selectedConsultation.images || []).filter((x) => x.id !== img.id);
+      applyUpdatedRecordImages(selectedConsultation.id, updatedImages);
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || 'Could not remove photo. Please try again.';
+      Alert.alert('Remove Failed', errMsg);
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
+
   // ── Loading / missing guards ───────────────────────────────────────────────
   if (loading) {
     return (
@@ -511,6 +609,15 @@ const PetDetailsScreen = ({ route, navigation }) => {
                   </Text>
                 </View>
               ) : null}
+
+              {Array.isArray(records[0].images) && records[0].images.length > 0 ? (
+                <View style={styles.recordPhotoBadge}>
+                  <Ionicons name="images-outline" size={12} color={colors.primaryDeep} />
+                  <Text style={styles.recordPhotoText}>
+                    {records[0].images.length} {records[0].images.length === 1 ? 'photo' : 'photos'}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.latestConsultFooter}>
@@ -587,8 +694,8 @@ const PetDetailsScreen = ({ route, navigation }) => {
               {rec.treatment || rec.notes || 'Tap to view full consultation details.'}
             </Text>
 
-            {/* Prescriptions & Follow-up Badges */}
-            {(rec.prescriptions || rec.next_visit_date) ? (
+            {/* Prescriptions, Follow-up & Photos Badges */}
+            {(rec.prescriptions || rec.next_visit_date || (Array.isArray(rec.images) && rec.images.length > 0)) ? (
               <View style={styles.recordBadgesRow}>
                 {rec.prescriptions ? (
                   <View style={styles.recordRxBadge}>
@@ -604,6 +711,15 @@ const PetDetailsScreen = ({ route, navigation }) => {
                     <Ionicons name="calendar-outline" size={12} color={colors.amberDark} />
                     <Text style={styles.recordFollowUpText}>
                       Follow-up: {formatDate(rec.next_visit_date)}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {Array.isArray(rec.images) && rec.images.length > 0 ? (
+                  <View style={styles.recordPhotoBadge}>
+                    <Ionicons name="images-outline" size={12} color={colors.primaryDeep} />
+                    <Text style={styles.recordPhotoText}>
+                      {rec.images.length} {rec.images.length === 1 ? 'photo' : 'photos'}
                     </Text>
                   </View>
                 ) : null}
@@ -1002,7 +1118,7 @@ const PetDetailsScreen = ({ route, navigation }) => {
 
       {/* ── Consultation Details Modal ────────────────────────────────────── */}
       <Modal
-        visible={consultationModalVisible && Boolean(selectedConsultation)}
+        visible={consultationModalVisible && Boolean(selectedConsultation) && !lightboxImage}
         transparent
         animationType="fade"
         onRequestClose={() => setConsultationModalVisible(false)}
@@ -1150,6 +1266,99 @@ const PetDetailsScreen = ({ route, navigation }) => {
                       </View>
                     </View>
                   ) : null}
+
+                  {/* Section 7: Medical Photos (up to 5) */}
+                  {(() => {
+                    const recImages = Array.isArray(selectedConsultation.images) ? selectedConsultation.images : [];
+                    const photoCount = recImages.length;
+                    return (
+                      <View style={styles.consultSection}>
+                        <View style={styles.photoSectionHeader}>
+                          <View style={styles.consultSectionLabelRow}>
+                            <Ionicons name="images-outline" size={13} color={colors.primary} />
+                            <Text style={styles.consultSectionLabel}>MEDICAL PHOTOS ({photoCount} / 5)</Text>
+                          </View>
+                          {photoCount < 5 && (
+                            <TouchableOpacity
+                              style={[styles.addPhotoBtn, uploadingRecordImages && { opacity: 0.7 }]}
+                              activeOpacity={0.85}
+                              disabled={uploadingRecordImages}
+                              onPress={handleAddMedicalRecordPhotos}
+                              accessibilityLabel="Add medical record photo"
+                            >
+                              {uploadingRecordImages ? (
+                                <ActivityIndicator size="small" color={colors.white} />
+                              ) : (
+                                <>
+                                  <Ionicons name="camera-outline" size={14} color={colors.white} />
+                                  <Text style={styles.addPhotoBtnText}>Add Photo</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {recImages.length === 0 ? (
+                          <View style={styles.consultCard}>
+                            <Text style={styles.consultMutedText}>
+                              No photos attached yet. Tap "Add Photo" to share photos with clinic staff (up to 5).
+                            </Text>
+                          </View>
+                        ) : (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.photoGalleryRow}
+                          >
+                            {recImages.map((img) => {
+                              const isStaffUpload = img.uploaded_by_role === 'staff';
+                              const roleLabel = isStaffUpload ? 'Staff' : 'You / Pet Owner';
+                              return (
+                                <View key={img.id} style={styles.photoThumbCard}>
+                                  <TouchableOpacity
+                                    activeOpacity={0.88}
+                                    onPress={() => setLightboxImage(img)}
+                                    accessibilityLabel={`View medical photo uploaded by ${roleLabel}`}
+                                  >
+                                    <Image
+                                      source={{ uri: img.image_url || img.image_data }}
+                                      style={styles.photoThumbImg}
+                                      resizeMode="cover"
+                                    />
+                                  </TouchableOpacity>
+
+                                  {!isStaffUpload && (
+                                    <TouchableOpacity
+                                      style={styles.photoDeleteBtn}
+                                      activeOpacity={0.85}
+                                      disabled={deletingImageId === img.id}
+                                      onPress={() => handleDeleteMedicalRecordImage(img)}
+                                      accessibilityLabel="Remove uploaded photo"
+                                    >
+                                      {deletingImageId === img.id ? (
+                                        <ActivityIndicator size="small" color="#BA1A1A" />
+                                      ) : (
+                                        <Ionicons name="trash-outline" size={13} color="#BA1A1A" />
+                                      )}
+                                    </TouchableOpacity>
+                                  )}
+
+                                  <View style={[styles.photoRoleBadge, isStaffUpload ? styles.photoRoleStaff : styles.photoRoleOwner]}>
+                                    <Text
+                                      style={[styles.photoRoleText, isStaffUpload ? styles.photoRoleTextStaff : styles.photoRoleTextOwner]}
+                                      numberOfLines={1}
+                                    >
+                                      {roleLabel}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </ScrollView>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </ScrollView>
 
                 {/* Modal Footer / Close Button */}
@@ -1167,6 +1376,56 @@ const PetDetailsScreen = ({ route, navigation }) => {
             ) : null}
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* ── Full-Screen Photo Lightbox Modal ───────────────────────────────── */}
+      <Modal
+        visible={Boolean(lightboxImage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightboxImage(null)}
+      >
+        <View style={styles.lightboxOverlay}>
+          {lightboxImage && (
+            <View style={styles.lightboxCard}>
+              <View style={styles.lightboxHeader}>
+                <View style={{ flex: 1 }}>
+                  <View
+                    style={[
+                      styles.photoRoleBadge,
+                      lightboxImage.uploaded_by_role === 'staff' ? styles.photoRoleStaff : styles.photoRoleOwner,
+                      { alignSelf: 'flex-start', marginBottom: 4 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoRoleText,
+                        lightboxImage.uploaded_by_role === 'staff' ? styles.photoRoleTextStaff : styles.photoRoleTextOwner,
+                      ]}
+                    >
+                      {lightboxImage.uploaded_by_role === 'staff' ? 'Staff' : 'You / Pet Owner'}
+                    </Text>
+                  </View>
+                  <Text style={styles.lightboxUploaderName} numberOfLines={1}>
+                    {lightboxImage.uploaded_by_name || (lightboxImage.uploaded_by_role === 'staff' ? 'Clinic Staff' : 'Pet Owner')}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.lightboxCloseBtn}
+                  onPress={() => setLightboxImage(null)}
+                  accessibilityLabel="Close full photo"
+                >
+                  <Ionicons name="close" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <Image
+                source={{ uri: lightboxImage.image_url || lightboxImage.image_data }}
+                style={styles.lightboxFullImage}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -2201,6 +2460,141 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.md,
     color: colors.white,
+  },
+  recordPhotoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E8F5E9',
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+  },
+  recordPhotoText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.primaryDeep,
+  },
+  photoSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  addPhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+  },
+  addPhotoBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.xs,
+    color: colors.white,
+  },
+  photoGalleryRow: {
+    gap: spacing.sm,
+    paddingVertical: 2,
+  },
+  photoThumbCard: {
+    width: 112,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 5,
+    gap: 5,
+    position: 'relative',
+  },
+  photoThumbImg: {
+    width: '100%',
+    height: 92,
+    borderRadius: radii.sm,
+    backgroundColor: colors.background,
+  },
+  photoDeleteBtn: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  photoRoleBadge: {
+    borderRadius: radii.pill,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+    alignSelf: 'flex-start',
+  },
+  photoRoleStaff: {
+    backgroundColor: '#C8E8D0',
+  },
+  photoRoleOwner: {
+    backgroundColor: '#F8E0A8',
+  },
+  photoRoleText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 10,
+  },
+  photoRoleTextStaff: {
+    color: '#2A6038',
+  },
+  photoRoleTextOwner: {
+    color: '#705C30',
+  },
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(20, 22, 20, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.base,
+  },
+  lightboxCard: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: '#FAF6F0',
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  lightboxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.sm,
+  },
+  lightboxUploaderName: {
+    fontFamily: fonts.headingBold,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+  },
+  lightboxCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  lightboxFullImage: {
+    width: '100%',
+    height: 380,
+    backgroundColor: '#1E201E',
   },
 });
 

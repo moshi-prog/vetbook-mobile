@@ -150,6 +150,39 @@ export const uploadPetAvatar = async (petId, imageUri) => {
 
 export const getMedicalRecords = (petId) => api.get(`/pets/${petId}/medical-records`);
 
+const toMedicalImageDataUri = async (item) => {
+  if (typeof item === 'string') {
+    if (item.startsWith('data:image/')) return item;
+    const response = await fetch(item);
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  if (item && typeof item === 'object') {
+    if (item.base64) {
+      const mime = item.mimeType && item.mimeType.startsWith('image/') ? item.mimeType : 'image/jpeg';
+      return `data:${mime};base64,${item.base64}`;
+    }
+    if (item.uri) {
+      return toMedicalImageDataUri(item.uri);
+    }
+  }
+  throw new Error('Invalid medical record image input');
+};
+
+export const uploadMedicalRecordImages = async (recordId, imagesBase64OrAssets) => {
+  const list = Array.isArray(imagesBase64OrAssets) ? imagesBase64OrAssets : [imagesBase64OrAssets];
+  const dataUris = await Promise.all(list.filter(Boolean).map(toMedicalImageDataUri));
+  return api.post(`/medical-records/${recordId}/images`, { images: dataUris });
+};
+
+export const deleteMedicalRecordImage = (recordId, imageId) =>
+  api.delete(`/medical-records/${recordId}/images/${imageId}`);
+
 // ============= APPOINTMENT ENDPOINTS (for later) =============
 
 export const getUserAppointments = () => api.get('/user/appointments');
@@ -194,6 +227,8 @@ api.deletePet = deletePet;
 api.uploadUserAvatar = uploadUserAvatar;
 api.uploadPetAvatar = uploadPetAvatar;
 api.getMedicalRecords = getMedicalRecords;
+api.uploadMedicalRecordImages = uploadMedicalRecordImages;
+api.deleteMedicalRecordImage = deleteMedicalRecordImage;
 api.getUserAppointments = getUserAppointments;
 api.getBookedSlots = getBookedSlots;
 api.getAppointment = getAppointment;
